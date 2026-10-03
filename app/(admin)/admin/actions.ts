@@ -1,0 +1,397 @@
+"use server";
+// Staff actions. Every action checks the signed-in user is staff, then writes with the server key.
+import { revalidatePath } from "next/cache";
+import { adminClient } from "@/lib/supabase/admin";
+import { requireStaff } from "@/lib/staff";
+import { markPaid, notifyInvoice } from "@/lib/invoices";
+import { normIg, dubaiInstant, toE164 } from "@/lib/format";
+import { emailHtml, emailReady, sendEmail } from "@/lib/notify/email";
+import { ziinaReady, ziinaRegisterWebhook } from "@/lib/payments/ziina";
+import { tabbyReady, tabbyRegisterWebhook } from "@/lib/payments/tabby";
+import type { ImportedLot } from "@/lib/import";
+import { SITE_URL } from "@/lib/env";
+
+export type Result = { ok: boolean; message: string; id?: string };
+const ok = (message: string, id?: string): Result => ({ ok: true, message, id });
+const bad = (message: string): Result => ({ ok: false, message });
+
+async function guard<T extends Result>(fn: () => Promise<T>): Promise<Result> {
+  try {
+    await requireStaff();
+    return await fn();
+  } catch (e) {
+    return bad((e as Error).message || "Something went wrong");
+  }
+}
+
+const int = (v: unknown) => {
+  const n = Math.round(Number(String(v ?? "").replace(/[^\d.]/g, "")));
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+const str = (v: unknown, n = 200) => String(v ?? "").trim().slice(0, n);
+
+// ─── auctions ───
+
+export async function saveAuction(input: { id?: string; number: number; sale_date: string; prebid_date: string; prebid_time: string; live_time: string }) {
+  return guard(async () => {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.sale_date) || !/^\d{4}-\d{2}-\d{2}$/.test(input.prebid_date)) return bad("Pick the dates.");
+    if (new Date(`${input.sale_date}T00:00:00Z`).getUTCDay() !== 6) return bad("The auction date should be a Saturday.");
+    const row = {
+      number: Math.max(1, Math.round(input.number)),
+      sale_date: input.sale_date,
+      prebid_opens_at: dubaiInstant(input.prebid_date, input.prebid_time || "12:00"),
+      live_starts_at: dubaiInstant(input.sale_date, input.live_time || "16:00")
+    };
+    if (row.prebid_opens_at >= row.live_starts_at) return bad("Pre-bids must open before the live starts.");
+    const db = adminClient();
+    const { data, error } = input.id
+      ? await db.from("auctions").update(row).eq("id", input.id).select("id").single()
+      : await db.from("auctions").insert({ ...row, status: "draft" }).select("id").single();
+    if (error) return bad(error.code === "23505" ? `Auction Nº ${row.number} already exists.` : error.message);
+    revalidatePath("/admin/auctions");
+    return ok(input.id ? "Auction saved." : `Auction Nº ${row.number} created as a draft.`, data.id);
+  });
+}
+
+export async function setAuctionStatus(id: string, status: "draft" | "published" | "closed") {
+  return guard(async () => {
+    const db = adminClient();
+    if (status === "closed") {
+      const { data: live } = await db.from("lots").select("id").eq("auction_id", id).gt("ends_at", new Date().toISOString()).limit(1);
+      if (live && live.length) return bad("A lot is live. Wait for its timer to end.");
+      await db.from("auctions").update({ status, block_lot_id: null }).eq("id", id);
+    } else {
+      await db.from("auctions").update({ status }).eq("id", id);
+    }
+    revalidatePath(`/admin/auctions/${id}`);
+    return ok(status === "published" ? "Published: the catalogue is now on the website." : status === "closed" ? "Auction closed." : "Back to draft: hidden from the website.");
+  });
+}
+
+// ─── lots ───
+
+export type LotInput = {
+  id?: string;
+  auction_id: string;
+  lot_number?: number | null;
+  pub: Record<string, unknown>;
+  priv: Record<string, unknown>;
+  consignment_id?: string | null;
+};
+
+const PUB_TEXT = ["brand", "model", "reference", "year", "case_size", "case_material", "dial", "bracelet", "dial_colour", "bezel", "shape", "hands", "condition"];
+
+export async function saveLot(input: LotInput) {
+  return guard(async () => {
+    const db = adminClient();
+    const p = input.pub;
+    const row: Record<string, unknown> = {};
+    for (const k of PUB_TEXT) row[k] = str(p[k], 120);
+    row.notes_en = str(p.notes_en, 4000);
+    row.notes_ar = str(p.notes_ar, 4000);
+    row.has_box = !!p.has_box;
+    row.has_papers = !!p.has_papers;
+    row.no_reserve = !!p.no_reserve;
+    row.estimate_low = int(p.estimate_low);
+    row.estimate_high = int(p.estimate_high);
+    row.start_price = int(p.start_price);
+    row.photos = Array.isArray(p.photos) ? (p.photos as string[]).filter(u => /^https:\/\//.test(u)).slice(0, 24) : [];
+    if (!row.brand || !row.model) return bad("Brand and model are required.");
+    if (!row.estimate_low || !row.estimate_high) return bad("Add a low and a high estimate.");
+    if ((row.estimate_low as number) > (row.estimate_high as number)) return bad("The low estimate is higher than the high estimate.");
+    if (!row.start_price) return bad("Add a starting bid.");
+    const reserve = row.no_reserve ? null : int(input.priv.reserve);
+    if (!row.no_reserve && !reserve) return bad("Set a reserve, or tick No reserve.");
+
+    let id = input.id;
+    if (id) {
+      const { data: cur } = await db.from("lots").select("bid_count, start_price").eq("id", id).single();
+      if (cur && cur.bid_count > 0) row.start_price = cur.start_price; // locked once bidding has started
+      if (input.lot_number) row.lot_number = input.lot_number;
+      row.updated_at = new Date().toISOString();
+      const { error } = await db.from("lots").update(row).eq("id", id);
+      if (error) return bad(error.code === "23505" ? "Another lot already has that number." : error.message);
+    } else {
+      let n = input.lot_number || null;
+      if (!n) {
+        const { data: last } = await db.from("lots").select("lot_number").eq("auction_id", input.auction_id).order("lot_number", { ascending: false }).limit(1).maybeSingle();
+        n = (last?.lot_number || 0) + 1;
+      }
+      const { data, error } = await db.from("lots").insert({ ...row, auction_id: input.auction_id, lot_number: n }).select("id").single();
+      if (error) return bad(error.code === "23505" ? "Another lot already has that number." : error.message);
+      id = data.id as string;
+    }
+    const q = input.priv;
+    const { error: e2 } = await db.from("lot_private").upsert({
+      lot_id: id,
+      reserve,
+      source: q.source === "consign" ? "consign" : "stock",
+      cost: int(q.cost),
+      consignor_name: str(q.consignor_name, 120),
+      consignor_phone: str(q.consignor_phone, 40),
+      consignor_email: str(q.consignor_email, 160),
+      seller_fee: q.seller_fee === "" || q.seller_fee == null ? null : Number(q.seller_fee),
+      updated_at: new Date().toISOString()
+    });
+    if (e2) return bad(e2.message);
+    // Reserve changes can make a lot with bids a pure sale.
+    if (reserve) {
+      const { data: l } = await db.from("lots").select("current_bid").eq("id", id).single();
+      if (l?.current_bid && l.current_bid >= reserve) await db.from("lots").update({ reserve_met: true }).eq("id", id);
+    }
+    if (input.consignment_id) await db.from("consignments").update({ status: "listed", lot_id: id }).eq("id", input.consignment_id);
+    revalidatePath(`/admin/auctions/${input.auction_id}`);
+    return ok(input.id ? "Lot saved." : "Lot added.", id);
+  });
+}
+
+export async function deleteLot(id: string) {
+  return guard(async () => {
+    const db = adminClient();
+    const { data: lot } = await db.from("lots").select("auction_id, bid_count").eq("id", id).single();
+    if (!lot) return bad("Lot not found.");
+    if (lot.bid_count > 0) return bad("This lot has bids. It can’t be deleted; let it close unsold instead.");
+    const { data: inv } = await db.from("invoices").select("id").eq("lot_id", id).limit(1);
+    if (inv && inv.length) return bad("This lot has an invoice.");
+    const { error } = await db.from("lots").delete().eq("id", id);
+    if (error) return bad(error.message);
+    revalidatePath(`/admin/auctions/${lot.auction_id}`);
+    return ok("Lot deleted.");
+  });
+}
+
+export async function importLots(auctionId: string, lots: ImportedLot[]) {
+  return guard(async () => {
+    if (!lots.length) return bad("Nothing to add.");
+    if (lots.length > 300) return bad("Add at most 300 lots at a time.");
+    const db = adminClient();
+    const { data: last } = await db.from("lots").select("lot_number").eq("auction_id", auctionId).order("lot_number", { ascending: false }).limit(1).maybeSingle();
+    let n = last?.lot_number || 0;
+    const rows = lots.map(l => ({
+      ...l.pub,
+      brand: str(l.pub.brand, 60), model: str(l.pub.model, 120),
+      estimate_low: Math.max(1, Math.round(l.pub.estimate_low || l.pub.start_price || 1)),
+      estimate_high: Math.max(1, Math.round(l.pub.estimate_high || l.pub.estimate_low || l.pub.start_price || 1)),
+      start_price: Math.max(1, Math.round(l.pub.start_price || 1)),
+      auction_id: auctionId,
+      lot_number: ++n
+    }));
+    const { data, error } = await db.from("lots").insert(rows).select("id, lot_number");
+    if (error) return bad(error.message);
+    const byNo = new Map((data || []).map(r => [r.lot_number as number, r.id as string]));
+    const privs = lots.map((l, i) => ({ lot_id: byNo.get(rows[i].lot_number)!, ...l.priv, seller_fee: l.priv.seller_fee ?? null }));
+    const { error: e2 } = await db.from("lot_private").insert(privs);
+    if (e2) return bad(e2.message);
+    revalidatePath(`/admin/auctions/${auctionId}`);
+    const noReserve = lots.filter(l => !l.pub.no_reserve && !l.priv.reserve).length;
+    return ok(`${lots.length} lots added.${noReserve ? ` ${noReserve} still need a reserve before they can take bids.` : ""}`);
+  });
+}
+
+export async function relistLots(lotIds: string[], auctionId: string) {
+  return guard(async () => {
+    const db = adminClient();
+    const { data: src } = await db.from("lots").select("*").in("id", lotIds);
+    if (!src?.length) return bad("Nothing selected.");
+    const { data: privs } = await db.from("lot_private").select("*").in("lot_id", lotIds);
+    const privBy = new Map((privs || []).map(p => [p.lot_id, p]));
+    const { data: last } = await db.from("lots").select("lot_number").eq("auction_id", auctionId).order("lot_number", { ascending: false }).limit(1).maybeSingle();
+    let n = last?.lot_number || 0;
+    for (const l of src) {
+      const copy: Record<string, unknown> = { ...l };
+      for (const k of ["id", "created_at", "updated_at", "current_bid", "leader_paddle", "leader_via", "bid_count", "ends_at", "reserve_met", "made_pure"]) delete copy[k];
+      const { data: created, error } = await db.from("lots").insert({ ...copy, auction_id: auctionId, lot_number: ++n, relisted_from: l.id }).select("id").single();
+      if (error) return bad(error.message);
+      const p = privBy.get(l.id);
+      await db.from("lot_private").insert({
+        lot_id: created.id, reserve: p?.reserve ?? null, source: p?.source || "stock", cost: p?.cost ?? null,
+        consignor_name: p?.consignor_name || "", consignor_phone: p?.consignor_phone || "", consignor_email: p?.consignor_email || "", seller_fee: p?.seller_fee ?? null
+      });
+    }
+    revalidatePath(`/admin/auctions/${auctionId}`);
+    return ok(`${src.length} lot${src.length === 1 ? "" : "s"} added to this auction. Check their reserves with the owners.`);
+  });
+}
+
+export async function setLotPhotos(lotId: string, photos: string[]) {
+  return guard(async () => {
+    const clean = photos.filter(u => /^https:\/\//.test(u)).slice(0, 24);
+    const { error } = await adminClient().from("lots").update({ photos: clean, updated_at: new Date().toISOString() }).eq("id", lotId);
+    return error ? bad(error.message) : ok("Photos saved.");
+  });
+}
+
+// ─── live console data ───
+
+export async function consoleData(auctionId: string) {
+  await requireStaff();
+  const db = adminClient();
+  const { data: lots } = await db.from("lots").select("id").eq("auction_id", auctionId);
+  const ids = (lots || []).map(l => l.id);
+  const [{ data: privs }, { data: maxes }, { data: bidders }] = await Promise.all([
+    ids.length ? db.from("lot_private").select("lot_id, reserve, source, consignor_name, leader_ig").in("lot_id", ids) : Promise.resolve({ data: [] }),
+    ids.length ? db.from("max_bids").select("lot_id, amount, set_at, profiles(paddle, full_name)").in("lot_id", ids) : Promise.resolve({ data: [] }),
+    db.from("profiles").select("paddle, full_name, instagram, instagram_confirmed, phone_verified_at, suspended").order("paddle").limit(5000)
+  ]);
+  return {
+    privs: (privs || []) as { lot_id: string; reserve: number | null; source: string; consignor_name: string; leader_ig: string | null }[],
+    maxes: ((maxes || []) as unknown as { lot_id: string; amount: number; profiles: { paddle: number; full_name: string } | null }[]).map(m => ({ lot_id: m.lot_id, amount: m.amount, paddle: m.profiles?.paddle ?? null, name: m.profiles?.full_name || "" })),
+    bidders: (bidders || []).map(b => ({ paddle: b.paddle as number, name: b.full_name as string, ig: b.instagram_confirmed ? (b.instagram as string | null) : null, verified: !!b.phone_verified_at, suspended: !!b.suspended }))
+  };
+}
+
+export async function lotBidsDetailed(lotId: string) {
+  await requireStaff();
+  const { data } = await adminClient()
+    .from("bids").select("id, amount, paddle, ig_handle, via, is_auto, created_at, profiles!bids_bidder_id_fkey(full_name)")
+    .eq("lot_id", lotId).order("id", { ascending: false }).limit(40);
+  return ((data || []) as unknown as { id: number; amount: number; paddle: number | null; ig_handle: string | null; via: string; is_auto: boolean; created_at: string; profiles: { full_name: string } | null }[])
+    .map(b => ({ id: b.id, amount: b.amount, paddle: b.paddle, ig: b.ig_handle, via: b.via, auto: b.is_auto, at: b.created_at, name: b.profiles?.full_name || "" }));
+}
+
+// ─── bidders ───
+
+export async function updateBidder(profileId: string, patch: { instagram?: string; instagram_confirmed?: boolean; suspended?: boolean; role?: "bidder" | "staff" | "admin"; notes?: string; id_checked?: boolean; phone?: string }) {
+  return guard(async () => {
+    const me = await requireStaff();
+    const db = adminClient();
+    const row: Record<string, unknown> = {};
+    if (patch.instagram !== undefined) row.instagram = normIg(patch.instagram);
+    if (patch.instagram_confirmed !== undefined) row.instagram_confirmed = patch.instagram_confirmed;
+    if (patch.suspended !== undefined) row.suspended = patch.suspended;
+    if (patch.role !== undefined) {
+      if (me.role !== "admin") return bad("Only an admin can change roles.");
+      if (profileId === me.id) return bad("You can’t change your own role.");
+      row.role = patch.role;
+    }
+    if (patch.phone !== undefined) {
+      const e164 = toE164(patch.phone);
+      if (!e164) return bad("Enter the number with its country code.");
+      row.phone = e164;
+      row.phone_verified_at = new Date().toISOString();
+    }
+    if (Object.keys(row).length) {
+      const { error } = await db.from("profiles").update(row).eq("id", profileId);
+      if (error) return bad(error.code === "23505" ? "That Instagram handle or phone number already belongs to another bidder." : error.message);
+    }
+    if (patch.notes !== undefined || patch.id_checked !== undefined) {
+      const { data: cur } = await db.from("profile_notes").select("notes, id_checked").eq("profile_id", profileId).maybeSingle();
+      await db.from("profile_notes").upsert({
+        profile_id: profileId,
+        notes: patch.notes ?? cur?.notes ?? "",
+        id_checked: patch.id_checked ?? cur?.id_checked ?? false,
+        updated_at: new Date().toISOString()
+      });
+    }
+    revalidatePath("/admin/bidders");
+    return ok("Saved.");
+  });
+}
+
+// ─── payments ───
+
+export async function markInvoicePaid(invoiceId: string, method: "bank" | "cash" | "card" | "tabby" | "tamara") {
+  return guard(async () => {
+    const me = await requireStaff();
+    const done = await markPaid(invoiceId, method, me.id);
+    revalidatePath("/admin/payments");
+    return done ? ok("Marked paid. The buyer has been sent a receipt.") : bad("Already paid or cancelled.");
+  });
+}
+
+export async function voidInvoice(invoiceId: string, reason: string) {
+  return guard(async () => {
+    const { error } = await adminClient().from("invoices").update({ status: "void", void_reason: str(reason, 300) || "Cancelled by staff", updated_at: new Date().toISOString() }).eq("id", invoiceId).neq("status", "paid");
+    revalidatePath("/admin/payments");
+    return error ? bad(error.message) : ok("Invoice cancelled.");
+  });
+}
+
+export async function resendInvoice(invoiceId: string) {
+  return guard(async () => {
+    const r = await notifyInvoice(invoiceId, { force: true });
+    revalidatePath("/admin/payments");
+    return r.sent ? ok(`Sent (${r.sent} message${r.sent === 1 ? "" : "s"}).${r.errors.length ? " " + r.errors.join(" · ") : ""}`) : bad(r.errors.join(" · ") || "Nothing was sent.");
+  });
+}
+
+/** For Instagram winners: attach the invoice to a registered bidder, then send the payment link. */
+export async function linkInvoiceBidder(invoiceId: string, paddle: number) {
+  return guard(async () => {
+    const db = adminClient();
+    const { data: prof } = await db.from("profiles").select("id, full_name").eq("paddle", paddle).maybeSingle();
+    if (!prof) return bad(`Paddle ${paddle} isn’t registered.`);
+    const { error } = await db.from("invoices").update({ bidder_id: prof.id, notified_at: null, notify_error: null, updated_at: new Date().toISOString() }).eq("id", invoiceId).neq("status", "paid");
+    if (error) return bad(error.message);
+    const r = await notifyInvoice(invoiceId, { force: true });
+    revalidatePath("/admin/payments");
+    return ok(`Linked to paddle ${paddle} (${prof.full_name}).${r.sent ? " Payment link sent." : " " + r.errors.join(" · ")}`);
+  });
+}
+
+export async function setPayout(invoiceId: string, paid: boolean) {
+  return guard(async () => {
+    await adminClient().from("invoices").update({ payout_paid_at: paid ? new Date().toISOString() : null }).eq("id", invoiceId);
+    revalidatePath("/admin/payments");
+    return ok(paid ? "Consignor payout recorded." : "Payout unmarked.");
+  });
+}
+
+// ─── consignments ───
+
+export async function setConsignmentStatus(id: string, status: "new" | "contacted" | "accepted" | "declined" | "listed") {
+  return guard(async () => {
+    await adminClient().from("consignments").update({ status }).eq("id", id);
+    revalidatePath("/admin/consignments");
+    return ok("Updated.");
+  });
+}
+
+// ─── settings ───
+
+export async function saveSettings(input: { seller_fee: number; pay_days: number; timer_seconds: number; lot_target: number; whatsapp: string; instagram: string; contact_email: string; bank_details: string }) {
+  return guard(async () => {
+    const db = adminClient();
+    const fee = Number(input.seller_fee);
+    if (!(fee >= 0 && fee <= 50)) return bad("Seller fee should be between 0 and 50%.");
+    const { error } = await db.from("settings").update({
+      seller_fee: fee,
+      pay_days: Math.min(30, Math.max(1, Math.round(input.pay_days))),
+      timer_seconds: Math.min(900, Math.max(30, Math.round(input.timer_seconds))),
+      lot_target: Math.max(1, Math.round(input.lot_target)),
+      whatsapp: toE164(input.whatsapp) || "",
+      instagram: str(input.instagram, 60).replace(/^@+/, ""),
+      contact_email: str(input.contact_email, 160),
+      updated_at: new Date().toISOString()
+    }).eq("id", 1);
+    if (error) return bad(error.message);
+    await db.from("settings_private").update({ bank_details: str(input.bank_details, 2000), updated_at: new Date().toISOString() }).eq("id", 1);
+    revalidatePath("/", "layout");
+    return ok("Settings saved.");
+  });
+}
+
+export async function registerWebhooks() {
+  return guard(async () => {
+    const out: string[] = [];
+    if (ziinaReady() && process.env.ZIINA_WEBHOOK_SECRET) {
+      const r = await ziinaRegisterWebhook(`${SITE_URL}/api/webhooks/ziina`);
+      out.push(`Ziina: ${r.detail}`);
+    } else out.push("Ziina: add ZIINA_API_KEY and ZIINA_WEBHOOK_SECRET first");
+    if (tabbyReady() && process.env.TABBY_WEBHOOK_SECRET) {
+      const r = await tabbyRegisterWebhook(`${SITE_URL}/api/webhooks/tabby`);
+      out.push(`Tabby: ${r.detail}`);
+    } else out.push("Tabby: add TABBY_SECRET_KEY, TABBY_MERCHANT_CODE and TABBY_WEBHOOK_SECRET first");
+    out.push(`Tamara: add ${SITE_URL}/api/webhooks/tamara in the Tamara partner portal`);
+    return ok(out.join(" · "));
+  });
+}
+
+export async function sendTestEmail() {
+  return guard(async () => {
+    const me = await requireStaff();
+    if (!emailReady()) return bad("Add RESEND_API_KEY and EMAIL_FROM first.");
+    const r = await sendEmail({ to: me.email, subject: "Test from The Time Souk", text: "Email is working.", html: emailHtml({ lang: "en", heading: "Email is working", blocks: ["This is a test from your auction admin."], footer: "The Time Souk admin" }) });
+    return r.ok ? ok(`Test email sent to ${me.email}.`) : bad(r.error || "Failed");
+  });
+}
