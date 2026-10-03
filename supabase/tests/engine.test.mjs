@@ -2,11 +2,13 @@
 // Run: npm run test:db
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 
-const migration = readFileSync(new URL("../migrations/0001_init.sql", import.meta.url), "utf8");
+// Every migration, in order, exactly as you run them in Supabase.
+const migrationsDir = new URL("../migrations/", import.meta.url);
+const migrations = readdirSync(migrationsDir).filter(f => f.endsWith(".sql")).sort().map(f => readFileSync(new URL(f, migrationsDir), "utf8"));
 let db;
 
 // A tiny stand-in for the parts of Supabase the migration relies on.
@@ -78,7 +80,9 @@ const bid = (user, lot, amount, kind = "bid") =>
   as(user.id, () => one("select place_bid($1, $2, $3) as r", [lot, amount, kind])).then(x => x.r);
 const staffBid = (staff, lot, amount, { paddle = null, ig = null, via = "instagram", kind = "bid" } = {}) =>
   as(staff.id, () => one("select staff_record_bid($1, $2, $3, $4, $5, $6) as r", [lot, amount, paddle, ig, via, kind])).then(x => x.r);
-const action = (staff, lot, a) => as(staff.id, () => one("select staff_lot_action($1, $2) as r", [lot, a])).then(x => x.r);
+const action = (staff, lot, a, seconds = null) =>
+  as(staff.id, () => one("select staff_lot_action($1, $2, $3) as r", [lot, a, seconds])).then(x => x.r);
+const secsLeft = r => (new Date(r.ends_at) - Date.now()) / 1000;
 const lotRow = lot => one("select * from lots where id = $1", [lot]);
 const ladder = lot => all("select amount, paddle, via, is_auto from bids where lot_id = $1 order by id", [lot]);
 const closeLot = lot => db.query("update lots set ends_at = now() - interval '1 second' where id = $1", [lot]);
@@ -87,7 +91,7 @@ let A, B, C, S, U;
 before(async () => {
   db = new PGlite({ extensions: { pgcrypto } });
   await db.exec(SUPABASE_STUB);
-  await db.exec(migration);
+  for (const m of migrations) await db.exec(m.replace(/^notify pgrst.*$/m, ""));
   A = await makeUser("a@test.ae");
   B = await makeUser("b@test.ae");
   C = await makeUser("c@test.ae");
@@ -311,6 +315,42 @@ test("live controls: block, start, one live lot at a time, hammer, reopen", asyn
   await action(S, lot2, "block");
   await action(S, lot2, "clear");
   assert.equal((await one("select block_lot_id from auctions where id = $1", [auc])).block_lot_id, null);
+});
+
+test("timers: settings default, then the auction's, then the lot's own; never changed while running", async () => {
+  const auc = await makeAuction();
+  const [l1, l2, l3, l4] = [await makeLot(auc), await makeLot(auc), await makeLot(auc), await makeLot(auc)];
+  const near = (r, s) => assert.ok(Math.abs(secsLeft(r) - s) < 3, `expected about ${s}s, got ${secsLeft(r)}s`);
+
+  await db.query("update settings set timer_seconds = 150 where id = 1");
+  await action(S, l1, "block");
+  near(await action(S, l1, "start"), 150);
+  await action(S, l1, "hammer");
+
+  await db.query("update auctions set timer_seconds = 120 where id = $1", [auc]);
+  await action(S, l2, "block");
+  near(await action(S, l2, "start"), 120);
+  await expectError(action(S, l2, "set_timer", 300), "timer_running");
+  near(await action(S, l2, "restart", 90), 90);
+  assert.equal((await lotRow(l2)).timer_seconds, 90);
+  await action(S, l2, "hammer");
+
+  await action(S, l3, "block", 45);
+  assert.equal((await lotRow(l3)).timer_seconds, 45);
+  await action(S, l3, "set_timer", 60);
+  near(await action(S, l3, "start"), 60);
+  await action(S, l3, "hammer");
+
+  await action(S, l4, "block");
+  await expectError(action(S, l4, "set_timer", 5), "invalid_timer");
+  await expectError(action(S, l4, "start", 7200), "invalid_timer");
+  await action(S, l4, "set_timer", 200);
+  await action(S, l4, "set_timer", null);
+  near(await action(S, l4, "start"), 120);
+  await action(S, l4, "hammer");
+  await expectError(as(A.id, () => one("select staff_lot_action($1, 'set_timer', 60)", [l4])), "staff_only");
+  await expectError(db.query("update auctions set timer_seconds = 5 where id = $1", [auc]), "new row for relation");
+  await db.query("update settings set timer_seconds = 180 where id = 1");
 });
 
 test("invoices: created once for sold lots, due in working days", async () => {

@@ -76,16 +76,15 @@ export function LivePanel({ locale, me, instagram, history = [] }: { locale: Loc
 }
 
 /** Home and catalogue top: the lot on the block if there is one, otherwise the auction hero. */
-export function AuctionTop({ locale, me, instagram, timerSeconds, history, showFacts = true }: {
+export function AuctionTop({ locale, me, instagram, history, showFacts = true }: {
   locale: Locale;
   me: MyStatus | null;
   instagram: string;
-  timerSeconds: number;
   history?: BidRow[];
   showFacts?: boolean;
 }) {
   const t = getDict(locale);
-  const { blockLot, auction, lots, statusOf, now } = useLive();
+  const { blockLot, auction, lots, statusOf, now, timerSeconds } = useLive();
   useTick(1000);
   if (blockLot) return <LivePanel locale={locale} me={me} instagram={instagram} history={history} />;
 

@@ -6,8 +6,8 @@ import { SAMPLE_SETTINGS, sampleAuction, sampleHistory } from "./sample";
 import type { Auction, BidRow, Lot, MyStatus, Settings } from "./types";
 
 const LOT_FIELDS =
-  "id,auction_id,lot_number,brand,model,reference,year,case_size,case_material,dial,bracelet,dial_colour,bezel,shape,hands,has_box,has_papers,condition,notes_en,notes_ar,estimate_low,estimate_high,start_price,no_reserve,reserve_met,made_pure,photos,current_bid,leader_paddle,leader_via,bid_count,ends_at";
-const AUCTION_FIELDS = "id,number,sale_date,prebid_opens_at,live_starts_at,status,block_lot_id";
+  "id,auction_id,lot_number,brand,model,reference,year,case_size,case_material,dial,bracelet,dial_colour,bezel,shape,hands,has_box,has_papers,condition,notes_en,notes_ar,estimate_low,estimate_high,start_price,no_reserve,reserve_met,made_pure,photos,current_bid,leader_paddle,leader_via,bid_count,ends_at,timer_seconds";
+const AUCTION_FIELDS = "id,number,sale_date,prebid_opens_at,live_starts_at,status,block_lot_id,timer_seconds";
 
 export const getSettings = cache(async (): Promise<Settings> => {
   const sb = await serverClient();

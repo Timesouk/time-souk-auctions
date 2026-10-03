@@ -31,7 +31,7 @@ export function Header({ locale, t, auctionNo, isLive, paddle }: Props) {
     <header className="hdr">
       <div className="wrap">
         <Link href={`/${locale}`} aria-label="The Time Souk" onClick={() => setOpen(false)}>
-          <Logo />
+          <Logo priority />
         </Link>
         <nav className="main" aria-label="Main">
           {links.map(([href, label, live]) => (

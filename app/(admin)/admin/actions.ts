@@ -32,15 +32,18 @@ const str = (v: unknown, n = 200) => String(v ?? "").trim().slice(0, n);
 
 // ─── auctions ───
 
-export async function saveAuction(input: { id?: string; number: number; sale_date: string; prebid_date: string; prebid_time: string; live_time: string }) {
+export async function saveAuction(input: { id?: string; number: number; sale_date: string; prebid_date: string; prebid_time: string; live_time: string; timer_seconds?: number | null }) {
   return guard(async () => {
     if (!/^\d{4}-\d{2}-\d{2}$/.test(input.sale_date) || !/^\d{4}-\d{2}-\d{2}$/.test(input.prebid_date)) return bad("Pick the dates.");
-    if (new Date(`${input.sale_date}T00:00:00Z`).getUTCDay() !== 6) return bad("The auction date should be a Saturday.");
+    if (!/^\d{2}:\d{2}$/.test(input.live_time || "") || !/^\d{2}:\d{2}$/.test(input.prebid_time || "")) return bad("Pick the times.");
+    const timer = input.timer_seconds == null ? null : Math.round(Number(input.timer_seconds));
+    if (timer != null && !(timer >= 10 && timer <= 3600)) return bad("The timer should be between 10 seconds and 60 minutes.");
     const row = {
       number: Math.max(1, Math.round(input.number)),
       sale_date: input.sale_date,
-      prebid_opens_at: dubaiInstant(input.prebid_date, input.prebid_time || "12:00"),
-      live_starts_at: dubaiInstant(input.sale_date, input.live_time || "16:00")
+      prebid_opens_at: dubaiInstant(input.prebid_date, input.prebid_time),
+      live_starts_at: dubaiInstant(input.sale_date, input.live_time),
+      timer_seconds: timer
     };
     if (row.prebid_opens_at >= row.live_starts_at) return bad("Pre-bids must open before the live starts.");
     const db = adminClient();
@@ -49,7 +52,21 @@ export async function saveAuction(input: { id?: string; number: number; sale_dat
       : await db.from("auctions").insert({ ...row, status: "draft" }).select("id").single();
     if (error) return bad(error.code === "23505" ? `Auction Nº ${row.number} already exists.` : error.message);
     revalidatePath("/admin/auctions");
-    return ok(input.id ? "Auction saved." : `Auction Nº ${row.number} created as a draft.`, data.id);
+    revalidatePath("/", "layout");
+    return ok(input.id ? "Saved. The website shows the new details now." : `Auction Nº ${row.number} created as a draft.`, data.id);
+  });
+}
+
+/** Live console: use one timer length for every lot in this auction that hasn't started yet. */
+export async function setAuctionTimer(auctionId: string, seconds: number | null) {
+  return guard(async () => {
+    const timer = seconds == null ? null : Math.round(Number(seconds));
+    if (timer != null && !(timer >= 10 && timer <= 3600)) return bad("The timer should be between 10 seconds and 60 minutes.");
+    const db = adminClient();
+    const { error } = await db.from("auctions").update({ timer_seconds: timer }).eq("id", auctionId);
+    if (error) return bad(error.message);
+    await db.from("lots").update({ timer_seconds: null }).eq("auction_id", auctionId).is("ends_at", null);
+    return ok("Timer changed for every lot that hasn’t started.");
   });
 }
 
@@ -357,7 +374,7 @@ export async function saveSettings(input: { seller_fee: number; pay_days: number
     const { error } = await db.from("settings").update({
       seller_fee: fee,
       pay_days: Math.min(30, Math.max(1, Math.round(input.pay_days))),
-      timer_seconds: Math.min(900, Math.max(30, Math.round(input.timer_seconds))),
+      timer_seconds: Math.min(3600, Math.max(10, Math.round(input.timer_seconds))),
       lot_target: Math.max(1, Math.round(input.lot_target)),
       whatsapp: toE164(input.whatsapp) || "",
       instagram: str(input.instagram, 60).replace(/^@+/, ""),

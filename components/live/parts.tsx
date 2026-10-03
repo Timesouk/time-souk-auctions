@@ -46,7 +46,7 @@ export function BigCountdown({ to, locale }: { to: string; locale: Locale }) {
 
 /** The big yellow timer block: running, waiting on the block, or the result. */
 export function TimerBox({ locale, lot, status }: { locale: Locale; lot: Lot; status: LotStatus }) {
-  const { now, timerSeconds } = useLive();
+  const { now, timerFor } = useLive();
   useTick(250);
   const t = getDict(locale);
   if (status === "live" && lot.ends_at) {
@@ -77,7 +77,7 @@ export function TimerBox({ locale, lot, status }: { locale: Locale; lot: Lot; st
   return (
     <div className="timer idle">
       <span className="t-lbl">{t.status.block}</span>
-      <b className="num ltr">{mmss(timerSeconds * 1000)}</b>
+      <b className="num ltr">{mmss(timerFor(lot) * 1000)}</b>
       <p>{t.live.waitingTimer}</p>
     </div>
   );

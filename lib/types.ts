@@ -18,6 +18,7 @@ export type Auction = {
   live_starts_at: string;
   status: "draft" | "published" | "closed";
   block_lot_id: string | null;
+  timer_seconds?: number | null; // this auction's timer per lot; empty = the default in Settings
 };
 
 export type Lot = {
@@ -53,6 +54,7 @@ export type Lot = {
   leader_via: string | null;
   bid_count: number;
   ends_at: string | null;
+  timer_seconds?: number | null; // this lot's own timer, set from the live console
 };
 
 export type BidRow = {

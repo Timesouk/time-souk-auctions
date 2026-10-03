@@ -53,12 +53,13 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
   }
 
   const { auction, lots } = current;
+  const perLot = auction.timer_seconds || settings.timer_seconds;
   return (
     <LiveProvider auction={auction} lots={lots} timerSeconds={settings.timer_seconds}>
       {!block ? (
-        <Ticker items={t.home.ticker(pad2(auction.number), dateLong(auction.sale_date, locale), timeOf(auction.live_starts_at, locale), lots.length, timerWords(settings.timer_seconds, locale))} />
+        <Ticker items={t.home.ticker(pad2(auction.number), dateLong(auction.sale_date, locale), timeOf(auction.live_starts_at, locale), lots.length, timerWords(perLot, locale))} />
       ) : null}
-      <AuctionTop locale={locale} me={me} instagram={settings.instagram} timerSeconds={settings.timer_seconds} history={history} />
+      <AuctionTop locale={locale} me={me} instagram={settings.instagram} history={history} />
       {lots.length ? (
         <section className="wrap sec">
           <div className="sec-h">

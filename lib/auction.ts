@@ -57,3 +57,9 @@ export const mmss = (ms: number) => {
 };
 
 export const lotPath = (locale: string, auctionNo: number, lotNo: number) => `/${locale}/auctions/${auctionNo}/lots/${lotNo}`;
+
+/** 180 → "3:00", 95 → "1:35". */
+export const timerLabel = (seconds: number) => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+
+/** Timer choices offered in the admin (seconds). Any other length can be typed in. */
+export const TIMER_PRESETS = [30, 45, 60, 90, 120, 150, 180, 240, 300, 600];

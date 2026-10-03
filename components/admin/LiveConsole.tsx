@@ -5,9 +5,10 @@ import { useLive, useTick } from "../live/LiveProvider";
 import { TimerBox } from "../live/parts";
 import { WatchArt } from "../WatchArt";
 import { ConfirmButton } from "./ui";
+import { TimerPicker } from "./TimerPicker";
 import { browserClient } from "@/lib/supabase/client";
-import { consoleData, lotBidsDetailed } from "@/app/(admin)/admin/actions";
-import { bidLadder, isClosedStatus, isPure, nextMinBid, upNext } from "@/lib/auction";
+import { consoleData, lotBidsDetailed, setAuctionTimer } from "@/app/(admin)/admin/actions";
+import { bidLadder, isClosedStatus, isPure, nextMinBid, timerLabel, upNext } from "@/lib/auction";
 import { money, normIg, num, pad2, timeOf } from "@/lib/format";
 import { IS_PREVIEW } from "@/lib/env";
 import type { Lot } from "@/lib/types";
@@ -33,6 +34,8 @@ const ERR: Record<string, string> = {
   invoice_paid: "This lot’s invoice is already paid, so it can’t be reopened.",
   auction_not_published: "Publish the auction first (Auctions & lots).",
   lot_live: "A lot is live. Stop its timer first.",
+  timer_running: "The timer is running. Sudden death: it can't be changed now. Stop or Restart instead.",
+  invalid_timer: "The timer should be between 10 seconds and 60 minutes.",
   staff_only: "Staff only."
 };
 function explain(message: string) {
@@ -42,7 +45,7 @@ function explain(message: string) {
 }
 
 export function LiveConsole() {
-  const { lots, auction, blockLot, statusOf, byId, refresh, patchLot } = useLive();
+  const { lots, auction, blockLot, statusOf, byId, refresh, patchLot, timerFor, timerSeconds } = useLive();
   useTick(250);
   const sb = browserClient();
   const [data, setData] = useState<Data | null>(null);
@@ -125,11 +128,11 @@ export function LiveConsole() {
     return b ? `@${h} → paddle ${b.paddle} · ${b.name}` : `@${h} · unregistered Instagram bidder (invoice needs their contact details)`;
   }
 
-  async function lotAction(lot: Lot, action: string, done?: string) {
+  async function lotAction(lot: Lot, action: string, done?: string, seconds: number | null = null) {
     setNote(null);
     if (IS_PREVIEW || !sb) return setNote({ ok: false, text: "Preview mode: connect Supabase to run the live." });
     setBusy(true);
-    const { error } = await sb.rpc("staff_lot_action", { p_lot_id: lot.id, p_action: action });
+    const { error } = await sb.rpc("staff_lot_action", { p_lot_id: lot.id, p_action: action, p_seconds: seconds });
     setBusy(false);
     if (error) return setNote({ ok: false, text: explain(error.message) });
     await refresh();
@@ -139,6 +142,17 @@ export function LiveConsole() {
     }
     if (action === "reopen") finalized.current.delete(lot.id);
     if (done) setNote({ ok: true, text: done });
+  }
+
+  /** Same timer for every lot in this auction that hasn't started yet. */
+  async function timerForAll(seconds: number) {
+    setNote(null);
+    if (IS_PREVIEW) return setNote({ ok: false, text: "Preview mode: connect Supabase to change the timer." });
+    setBusy(true);
+    const r = await setAuctionTimer(auction.id, seconds).catch(() => ({ ok: false, message: "Couldn’t save the timer." }));
+    setBusy(false);
+    await refresh();
+    setNote({ ok: r.ok, text: r.ok ? `Every lot that hasn’t started now runs for ${timerLabel(seconds)}.` : r.message });
   }
 
   async function record(e: React.FormEvent) {
@@ -209,6 +223,24 @@ export function LiveConsole() {
                   </div>
                 </div>
                 <TimerBox locale="en" lot={blockLot} status={blockSt} />
+                {blockSt === "block" ? (
+                  <div className="timer-set">
+                    <span className="k">Timer for this lot</span>
+                    <TimerPicker
+                      key={`${blockLot.id}-${timerFor(blockLot)}`}
+                      label="Timer for this lot"
+                      value={timerFor(blockLot)}
+                      applyButton
+                      disabled={busy}
+                      onChange={s => s && s !== timerFor(blockLot) && lotAction(blockLot, "set_timer", `Lot ${pad2(blockLot.lot_number)} will run for ${timerLabel(s)}.`, s)}
+                    />
+                    {timerFor(blockLot) !== timerSeconds ? (
+                      <button className="btn sm" type="button" disabled={busy} onClick={() => timerForAll(timerFor(blockLot))}>Use {timerLabel(timerFor(blockLot))} for all remaining lots</button>
+                    ) : (
+                      <span className="fine">Same as the auction timer ({timerLabel(timerSeconds)}).</span>
+                    )}
+                  </div>
+                ) : null}
                 <div className="row">
                   {blockSt === "block" ? <button className="btn pri lg" type="button" disabled={busy} onClick={() => lotAction(blockLot, "start", "Timer running.")}>Start timer</button> : null}
                   {blockSt === "live" ? (

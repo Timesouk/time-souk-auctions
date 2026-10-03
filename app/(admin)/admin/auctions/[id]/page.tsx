@@ -4,8 +4,8 @@ import { AuctionForm, AuctionStatusButtons } from "@/components/admin/AuctionFor
 import { ImportLots, Relist } from "@/components/admin/ImportLots";
 import { adminClient } from "@/lib/supabase/admin";
 import { IS_PREVIEW } from "@/lib/env";
-import { dateLong, dubaiParts, num, pad2 } from "@/lib/format";
-import { isPure, lotPath } from "@/lib/auction";
+import { dateLong, dubaiParts, num, pad2, stamp } from "@/lib/format";
+import { isPure, lotPath, timerLabel } from "@/lib/auction";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,7 @@ export default async function AuctionAdmin({ params }: { params: Promise<{ id: s
   if (!auction) notFound();
   const [{ data: lots }, { data: settings }] = await Promise.all([
     db.from("lots").select("id, lot_number, brand, model, reference, estimate_low, estimate_high, start_price, current_bid, bid_count, no_reserve, reserve_met, made_pure, ends_at, photos").eq("auction_id", id).order("lot_number"),
-    db.from("settings").select("lot_target").eq("id", 1).single()
+    db.from("settings").select("lot_target, timer_seconds").eq("id", 1).single()
   ]);
   const ids = (lots || []).map(l => l.id);
   const { data: privs } = ids.length ? await db.from("lot_private").select("lot_id, reserve, source").in("lot_id", ids) : { data: [] };
@@ -53,6 +53,14 @@ export default async function AuctionAdmin({ params }: { params: Promise<{ id: s
           <h1 className="disp">Auction Nº {pad2(auction.number)} · {dateLong(auction.sale_date)}</h1>
         </div>
         <AuctionStatusButtons id={auction.id} status={auction.status} />
+      </div>
+
+      <div className="panel-card">
+        <span className="k">Date, time and timer · Live {stamp(auction.live_starts_at)} · {timerLabel(auction.timer_seconds || settings?.timer_seconds || 180)} per lot</span>
+        <AuctionForm
+          defaultTimer={settings?.timer_seconds || 180}
+          initial={{ id: auction.id, number: auction.number, sale_date: auction.sale_date, prebid_date: pre.date, prebid_time: pre.time, live_time: live.time, timer_seconds: auction.timer_seconds ?? null }}
+        />
       </div>
 
       <div className="stack" style={{ gap: 8 }}>
@@ -99,10 +107,6 @@ export default async function AuctionAdmin({ params }: { params: Promise<{ id: s
       <div className="cols">
         <div className="panel-card"><span className="k">Paste lots from Excel</span><ImportLots auctionId={auction.id} /></div>
         <div className="panel-card"><span className="k">Unsold from earlier auctions</span><Relist auctionId={auction.id} lots={relistable} /></div>
-        <div className="panel-card">
-          <span className="k">Dates</span>
-          <AuctionForm initial={{ id: auction.id, number: auction.number, sale_date: auction.sale_date, prebid_date: pre.date, prebid_time: pre.time, live_time: live.time }} />
-        </div>
       </div>
     </div>
   );

@@ -714,10 +714,13 @@ export const isLocale = (v: string): v is Locale => v === "en" || v === "ar";
 
 /** "3 minutes", "90 seconds" in either language. */
 export function timerWords(seconds: number, locale: Locale) {
-  if (seconds % 60) return locale === "ar" ? `${seconds} ثانية` : `${seconds} seconds`;
-  const m = seconds / 60;
-  if (locale === "ar") return m === 1 ? "دقيقة واحدة" : m === 2 ? "دقيقتان" : m <= 10 ? `${m} دقائق` : `${m} دقيقة`;
-  return m === 1 ? "1 minute" : `${m} minutes`;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  const minutes = (n: number) =>
+    locale === "ar" ? (n === 1 ? "دقيقة واحدة" : n === 2 ? "دقيقتان" : n <= 10 ? `${n} دقائق` : `${n} دقيقة`) : n === 1 ? "1 minute" : `${n} minutes`;
+  if (!s) return minutes(m);
+  if (m < 2) return locale === "ar" ? `${seconds} ثانية` : `${seconds} seconds`;
+  return locale === "ar" ? `${minutes(m)} و${s} ثانية` : `${m} min ${s} sec`;
 }
 
 export { num };

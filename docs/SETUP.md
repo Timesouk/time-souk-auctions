@@ -38,12 +38,13 @@ These involve approvals by other companies. Start them now and carry on with the
 3. **Region: South Asia (Mumbai)**. It's the closest Supabase region to Dubai, and the website is already set to run in Mumbai to match. *(If you pick another region, tell whoever maintains the code so they change `regions` in `vercel.json`.)*
 4. Leave the security options at their defaults (Data API on, public schema). Click **Create new project** and wait for it to finish (about 2 minutes).
 
-### 1.2 Create the tables and the bidding engine (run once)
+### 1.2 Create the tables and the bidding engine (two files, each run once)
 1. On GitHub, open `supabase/migrations/0001_init.sql` in the repository and click the **Copy raw file** button (top-right of the file).
-2. In Supabase: **SQL Editor → New query**. Paste. Click **Run**.
-3. You should see **Success. No rows returned**. Check **Table Editor**: you should see tables such as `auctions`, `lots`, `bids`, `invoices`, `profiles`.
+2. In Supabase: **SQL Editor → New query**. Paste. Click **Run**. You should see **Success. No rows returned**.
+3. Do the same with `supabase/migrations/0002_timers.sql` (adjustable timers). Run it **after** 0001.
+4. Check **Table Editor**: you should see tables such as `auctions`, `lots`, `bids`, `invoices`, `profiles`.
 
-> Run this script **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code.
+> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 is safe to run again.
 
 ### 1.3 Copy the API keys into Vercel later
 You'll need these three values in Part 3. Find them in **Project Settings → API Keys** (and **Project Settings → Data API** for the URL):
@@ -65,7 +66,7 @@ Don't copy them anywhere else; leave this tab open and paste them straight into 
 
 ```html
 <div style="font-family:Arial,sans-serif;max-width:480px">
-  <h2 style="margin:0 0 12px">THE TIME SOUK</h2>
+  <img src="https://www.yourdomain.com/brand/logo-email.png" width="120" alt="The Time Souk" style="display:block;margin:0 0 16px">
   <p>Your sign-in code is:</p>
   <p style="font-size:30px;font-weight:bold;letter-spacing:6px;margin:8px 0">{{ .Token }}</p>
   <p style="color:#555">It expires in 10 minutes. If you didn't ask for it, you can ignore this email.</p>
@@ -78,6 +79,7 @@ Don't copy them anywhere else; leave this tab open and paste them straight into 
 </div>
 ```
 
+   Replace `www.yourdomain.com` in the first line with your own address so your logo shows at the top.
 4. Custom email sending (so codes come from your domain and aren't capped at a few per hour) is set up in **Part 2.3**, after Resend.
 
 ### 1.5 Upgrade to Pro before launch (recommended)
@@ -259,16 +261,19 @@ Then in the Tamara Partner Portal: **Settings → General Settings → Webhooks 
 
 **Admin → Settings**:
 
-1. **Auction rules and contact.** Seller fee `7.5`, working days to pay `3`, timer `3:00`, weekly lot target `100`, the WhatsApp number and Instagram handle shown to bidders, contact email, and your **bank transfer details** (only shown on winners' payment pages). Save.
-2. **Connections.** Every line should show ✓. A ✗ names the missing Vercel variable. Add it in Vercel, then redeploy.
-3. Press **Send test email**. It should arrive in your inbox within a minute.
-4. Press **Register payment webhooks** (Part 5.4).
+1. **Auction rules and contact.** Seller fee `7.5`, working days to pay `3`, weekly lot target `100`, the WhatsApp number and Instagram handle shown to bidders, contact email, and your **bank transfer details** (only shown on winners' payment pages). Save.
+2. **Default timer per lot.** Pick from the list (30 seconds to 10 minutes) or **Other length…** and type minutes and seconds (10 seconds to 60 minutes). Every auction uses it unless you set a different timer on that auction (Part 8). Save.
+3. **Connections.** Every line should show ✓. A ✗ names the missing Vercel variable. Add it in Vercel, then redeploy.
+4. Press **Send test email**. It should arrive in your inbox within a minute, with your logo at the top.
+5. Press **Register payment webhooks** (Part 5.4).
 
 ---
 
 ## Part 8 · Your first auction
 
-1. **Admin → Auctions → New auction.** Number `1`, the Saturday date, live start `16:00` (Dubai time), and when pre-bids open (for example Monday 10:00). It's created as a **draft** (hidden from the website).
+1. **Admin → Auctions → New auction.** Number `1`, the auction date, live start `16:00` (Dubai time), when pre-bids open (for example Monday 10:00), and the timer per lot (leave **Default** to use the one in Settings). It's created as a **draft** (hidden from the website).
+   - **To change the date, time or timer later** (even after publishing): open the auction; the **Date, time and timer** card is at the top. Change the auction date (any day; it warns you if it isn't a Saturday), live start, pre-bid opening or timer, then **Save changes**. The website, including the home-page countdown, updates straight away. The live console links here too (**Change date, time or timer**).
+   - **Which timer a lot runs for:** the lot's own timer if you changed it in the live console, otherwise the auction's timer, otherwise the default in Settings.
 2. **Add lots.** Two ways:
    - **Paste from Excel or Google Sheets:** on the auction page, **Paste lots from Excel → Copy header row**, and paste it into row 1 of a new sheet. The columns are:
      `Brand, Model, Ref, Year, Size mm, Case, Dial, Dial colour, Bezel, Shape, Hands, Bracelet, Box, Papers, Condition, Est low, Est high, Start bid, No reserve, Reserve, Source, Cost, Consignor, Consignor phone, Seller fee %, Photo link, Notes`.
@@ -290,7 +295,9 @@ Use a separate test auction, number **99**, with 3 or 4 lots. Do it with a colle
 
 - [ ] A new bidder registers: email code arrives, phone code arrives (SMS, then WhatsApp if enabled).
 - [ ] Pre-bid: place a normal bid and a maximum bid from the phone; a second account outbids it; the maximum bid answers automatically.
+- [ ] Change the auction's live start time and check the home-page countdown moves.
 - [ ] **Admin → Live:** put lot 1 on the block. The website shows it big within a second or two.
+- [ ] Change **Timer for this lot** to 1:00 and check the website shows 1:00.
 - [ ] **Start timer.** Both screens count down together; the website timer turns red for the last 30 seconds.
 - [ ] Record an "Instagram" bid in the console (amount + `@handle`); it appears on the website.
 - [ ] A website bid lands while the timer runs; it appears in the console.
@@ -315,7 +322,14 @@ Change these in Vercel, then **Redeploy**:
 
 ## Part 10 · Saturday run of show
 
-**Pace.** 100 lots × 3 minutes is 5 hours of timers. With about 45 seconds between lots, a full sale runs **about 6¼ hours** (4:00 pm to roughly 10:15 pm). Plan breaks, or consider fewer lots per sale, or a shorter timer for lower-value lots (**Settings → Timer per lot** applies to the whole sale).
+**Pace.** The sale length depends on the timer. For 100 lots, with about 45 seconds between lots, starting at 4:00 pm:
+
+| Timer per lot | Sale length | Ends around |
+|---|---|---|
+| 1:00 | 2 h 55 min | 6:55 pm |
+| 1:30 | 3 h 45 min | 7:45 pm |
+| 2:00 | 4 h 35 min | 8:35 pm |
+| 3:00 | 6 h 15 min | 10:15 pm |
 
 **Morning**
 - Admin → Settings: all connections ✓.
@@ -327,14 +341,15 @@ Change these in Vercel, then **Redeploy**:
 
 **Each lot**
 1. Press **Put lot 01 on the block** (later: **Next: lot 02**). The website shows it big.
-2. Present the watch on Instagram live.
-3. **The moment you start the timer on Instagram, the staff member presses Start timer.**
-4. While it runs, staff type every Instagram, WhatsApp or phone bid into **Record a bid** (amount plus `@instagram` or paddle number). Website bids appear by themselves.
-5. When the site shows **Pure sale**, announce it on the live. To sell regardless of the reserve, press **Make pure sale**.
-6. At **0:00** the lot closes. It's sudden death: no extensions.
+2. Optional: change **Timer for this lot** under the yellow timer (pick a length, or **Other length…** then **Set**). The website shows the new length straight away. **Use [length] for all remaining lots** applies it to every lot still to come.
+3. Present the watch on Instagram live.
+4. **The moment you start the timer on Instagram, the staff member presses Start timer.**
+5. While it runs, staff type every Instagram, WhatsApp or phone bid into **Record a bid** (amount plus `@instagram` or paddle number). Website bids appear by themselves.
+6. When the site shows **Pure sale**, announce it on the live. To sell regardless of the reserve, press **Make pure sale**.
+7. At **0:00** the lot closes. It's sudden death: a running timer can't be lengthened or shortened.
    - If an Instagram bid arrived **before 0:00** but wasn't typed in time: **Reopen lot → record the bid → Hammer now**.
-   - **Restart timer** starts the 3 minutes again (use it if the Instagram timer and the site went out of step).
-7. Press **Next**.
+   - **Restart timer** starts the lot's full timer again (use it if the Instagram timer and the site went out of step).
+8. Press **Next**.
 
 **After the sale**
 - Winners who bid on the website get their payment link automatically within a minute of their lot closing.
@@ -351,6 +366,8 @@ Change these in Vercel, then **Redeploy**:
 | Problem | Fix |
 |---|---|
 | Site still shows sample watches | Supabase variables missing, or you didn't redeploy after adding them. |
+| Site shows an error after connecting Supabase | Check both database files ran: `0001_init.sql`, then `0002_timers.sql` (Part 1.2). |
+| Can't change the timer on a lot | Its timer is running. Sudden death: stop it, or let it end and Reopen. |
 | No email code | Check Resend → **Logs**. Check Supabase SMTP settings (Part 2.3), and that the templates contain `{{ .Token }}`. Look in spam. |
 | Email code says "invalid" | Codes expire after 10 minutes and only the newest code works. Ask for a new one. |
 | No phone code by WhatsApp | Set `TWILIO_VERIFY_CHANNELS=sms` and redeploy, then check the Verify service's WhatsApp tab has your Messaging Service. Twilio trial accounts only reach verified numbers. |

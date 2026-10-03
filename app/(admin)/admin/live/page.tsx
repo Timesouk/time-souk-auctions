@@ -5,6 +5,7 @@ import { adminClient } from "@/lib/supabase/admin";
 import { sampleAuction, SAMPLE_SETTINGS } from "@/lib/sample";
 import { IS_PREVIEW } from "@/lib/env";
 import { dateLong, pad2, stamp } from "@/lib/format";
+import { timerLabel } from "@/lib/auction";
 import type { Auction, Lot } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ export default async function LivePage() {
         <div>
           <span className="kick">Live console</span>
           <h1 className="disp">Auction Nº {pad2(auction.number)} · {dateLong(auction.sale_date)}</h1>
-          <p className="fine">Live on Instagram {stamp(auction.live_starts_at)} · {lots.length} lots · {Math.round(timer / 60 * 10) / 10} min per lot</p>
+          <p className="fine">Live on Instagram {stamp(auction.live_starts_at)} · {lots.length} lots · {timerLabel(auction.timer_seconds || timer)} per lot · <Link href={`/admin/auctions/${auction.id}`}>Change date, time or timer</Link></p>
         </div>
         {auction.status !== "published" ? <p className="alert">This auction is a {auction.status}. Publish it under Auctions &amp; lots before the live.</p> : null}
       </div>

@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Msg, useAction } from "./ui";
+import { TimerPicker } from "./TimerPicker";
 import { registerWebhooks, saveSettings, sendTestEmail, setConsignmentStatus } from "@/app/(admin)/admin/actions";
 
 type S = { seller_fee: number; pay_days: number; timer_seconds: number; lot_target: number; whatsapp: string; instagram: string; contact_email: string; bank_details: string };
@@ -14,11 +15,10 @@ export function SettingsForm({ initial }: { initial: S }) {
       <div className="form-grid">
         <label className="field">Seller fee %<input inputMode="decimal" {...n("seller_fee")} /></label>
         <label className="field">Working days to pay<input inputMode="numeric" {...n("pay_days")} /></label>
-        <label className="field">Timer per lot
-          <select {...n("timer_seconds")}>
-            {[60, 90, 120, 180, 240, 300].map(x => <option key={x} value={x}>{x % 60 ? `${x} seconds` : `${x / 60} minute${x === 60 ? "" : "s"}`}</option>)}
-          </select>
-        </label>
+        <div className="field" role="group" aria-label="Default timer per lot">Default timer per lot
+          <TimerPicker label="Default timer per lot" value={s.timer_seconds} onChange={v => v && setS({ ...s, timer_seconds: v })} />
+          <span className="fine">Each auction can use its own timer (Auctions → the auction).</span>
+        </div>
         <label className="field">Weekly lot target<input inputMode="numeric" {...n("lot_target")} /></label>
         <label className="field">WhatsApp number (shown to bidders)<input type="tel" placeholder="+971 5X XXX XXXX" {...n("whatsapp")} /></label>
         <label className="field">Instagram handle<input placeholder="thetimesouk" {...n("instagram")} /></label>

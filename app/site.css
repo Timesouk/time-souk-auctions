@@ -6,10 +6,10 @@
   --ink: #121417;
   --ink-2: #51575f;
   --line: #d4d8d1;
-  --yellow: #ffd23f;
-  --cyan: #1e9bd7;
+  --yellow: #fef100;
+  --cyan: #00b3f0;
   --cyan-ink: #0a6a9e;
-  --red: #e23b2e;
+  --red: #ff3131;
   --red-ink: #b3241a;
   --green: #1d8549;
   --on-strong: #ffffff;
@@ -120,7 +120,7 @@ button { font: inherit; }
 .preview-bar { background: var(--ink); color: var(--yellow); font-family: var(--f-mono); font-size: 12.5px; text-align: center; padding: 6px var(--gutter); }
 .hdr { position: sticky; top: 0; z-index: 40; background: var(--paper); border-bottom: 3px solid var(--ink); }
 .hdr .wrap { display: flex; align-items: center; gap: 18px; min-height: 76px; }
-.logo { display: block; height: 52px; width: auto; direction: ltr; }
+.logo { display: block; height: 62px; width: auto; direction: ltr; }
 .hdr nav.main { display: flex; gap: 2px; margin-inline: auto; }
 .hdr nav.main a { font-weight: 700; font-size: 14.5px; text-decoration: none; padding: 8px 12px; border: 2px solid transparent; white-space: nowrap; }
 .hdr nav.main a:hover { border-color: var(--line); }
@@ -140,7 +140,7 @@ button { font: inherit; }
   .menu-btn { display: block; }
   .hdr .wrap { min-height: 64px; gap: 12px; }
   .acts { margin-inline-start: auto; }
-  .logo { height: 44px; }
+  .logo { height: 48px; }
   .mobile-nav[data-open="true"] { display: block; border-top: 2px solid var(--ink); background: var(--paper); }
   .mobile-nav a { display: block; padding: 14px var(--gutter); font-weight: 800; font-size: 17px; text-decoration: none; border-bottom: 1px solid var(--line); }
 }
@@ -284,7 +284,8 @@ button { font: inherit; }
 [dir="rtl"] .timer .t-lbl { font-family: "IBM Plex Sans Arabic", sans-serif; letter-spacing: 0; }
 .timer b { font-size: clamp(76px, 10vw, 112px); line-height: 0.9; }
 .timer p { font-weight: 700; font-size: 15px; }
-.timer.idle b { opacity: 0.4; }
+.timer.idle b { color: var(--ink); }
+@supports (-webkit-text-stroke: 2px black) { .timer.idle b { color: transparent; -webkit-text-stroke: 3px var(--ink); } }
 .timer.hurry { background: var(--red); color: #fff; border-color: var(--red); }
 .timer.sold { background: var(--ink); color: var(--yellow); }
 .timer.unsold { background: var(--tint); border-color: var(--line); }

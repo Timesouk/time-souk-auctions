@@ -29,7 +29,7 @@ export default async function AuctionPage({ params }: P) {
         <span className="kick">{t.home.kicker}</span>
         <h1 className="disp">{t.home.auctionN(pad2(auction.number))}</h1>
         <p className="lede">
-          {dateLong(auction.sale_date, locale)} · {timeOf(auction.live_starts_at, locale)}. {t.home.liveFrom(timeOf(auction.live_starts_at, locale), timerWords(settings.timer_seconds, locale))}
+          {dateLong(auction.sale_date, locale)} · {timeOf(auction.live_starts_at, locale)}. {t.home.liveFrom(timeOf(auction.live_starts_at, locale), timerWords(auction.timer_seconds || settings.timer_seconds, locale))}
         </p>
         {Date.now() < Date.parse(auction.prebid_opens_at) ? <p className="alert info">{t.bid.notOpen(stamp(auction.prebid_opens_at, locale))}</p> : null}
       </section>

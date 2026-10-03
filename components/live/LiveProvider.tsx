@@ -16,7 +16,8 @@ type LiveState = {
   blockLot: Lot | null;
   refresh: () => Promise<void>;
   patchLot: (lot: Partial<Lot> & { id: string }) => void;
-  timerSeconds: number;
+  timerSeconds: number; // this auction's timer per lot
+  timerFor: (lot: Lot) => number; // the timer this lot will run for
 };
 
 const Ctx = createContext<LiveState | null>(null);
@@ -37,7 +38,7 @@ export function useTick(ms = 250) {
 }
 
 const LOT_FIELDS =
-  "id,auction_id,lot_number,brand,model,reference,year,case_size,case_material,dial,bracelet,dial_colour,bezel,shape,hands,has_box,has_papers,condition,notes_en,notes_ar,estimate_low,estimate_high,start_price,no_reserve,reserve_met,made_pure,photos,current_bid,leader_paddle,leader_via,bid_count,ends_at";
+  "id,auction_id,lot_number,brand,model,reference,year,case_size,case_material,dial,bracelet,dial_colour,bezel,shape,hands,has_box,has_papers,condition,notes_en,notes_ar,estimate_low,estimate_high,start_price,no_reserve,reserve_met,made_pure,photos,current_bid,leader_paddle,leader_via,bid_count,ends_at,timer_seconds";
 
 export function LiveProvider({
   auction: initialAuction,
@@ -70,7 +71,7 @@ export function LiveProvider({
     const sb = browserClient();
     if (!sb) return;
     const [{ data: a }, { data: l }] = await Promise.all([
-      sb.from("auctions").select("id,number,sale_date,prebid_opens_at,live_starts_at,status,block_lot_id").eq("id", initialAuction.id).maybeSingle(),
+      sb.from("auctions").select("id,number,sale_date,prebid_opens_at,live_starts_at,status,block_lot_id,timer_seconds").eq("id", initialAuction.id).maybeSingle(),
       sb.from("lots").select(LOT_FIELDS).eq("auction_id", initialAuction.id).order("lot_number")
     ]);
     if (a) setAuction(a as Auction);
@@ -141,6 +142,7 @@ export function LiveProvider({
   const value = useMemo<LiveState>(() => {
     const now = () => Date.now() + offsetRef.current;
     const byId = new Map(lots.map(l => [l.id, l]));
+    const auctionTimer = auction.timer_seconds || timerSeconds;
     return {
       auction,
       lots,
@@ -151,7 +153,8 @@ export function LiveProvider({
       blockLot: auction.block_lot_id ? byId.get(auction.block_lot_id) || null : null,
       refresh,
       patchLot,
-      timerSeconds
+      timerSeconds: auctionTimer,
+      timerFor: (lot: Lot) => lot.timer_seconds || auctionTimer
     };
   }, [auction, lots, offset, refresh, patchLot, timerSeconds]);
 

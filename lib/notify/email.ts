@@ -1,3 +1,4 @@
+import { SITE_URL } from "../env";
 // Email through Resend's HTTP API.
 export const emailReady = () => !!(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
 
@@ -33,10 +34,10 @@ export function emailHtml(opts: { lang: "en" | "ar"; heading: string; blocks: st
   return `<!doctype html><html lang="${opts.lang}" dir="${dir}"><body style="margin:0;background:#f3f4f1;font-family:${font};color:#121417">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f1;padding:24px 12px"><tr><td align="center">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:3px solid #121417;text-align:${align}" dir="${dir}">
-<tr><td style="background:#121417;padding:14px 22px;font-family:'Arial Black',Arial,sans-serif;font-size:18px;letter-spacing:1px"><span style="color:#FFD23F">THE</span> <span style="color:#1E9BD7">TIME</span> <span style="color:#E23B2E">SOUK</span></td></tr>
+<tr><td style="background:#f3f4f1;padding:16px 22px;border-bottom:3px solid #121417"><img src="${SITE_URL}/brand/logo-email.png" width="120" alt="The Time Souk" style="display:block;border:0;height:auto;font-family:'Arial Black',Arial,sans-serif;font-size:18px;color:#121417"></td></tr>
 <tr><td style="padding:24px 22px 8px"><h1 style="margin:0 0 14px;font-size:24px;line-height:1.25">${esc(opts.heading)}</h1>
 ${opts.blocks.map(b => `<p style="margin:0 0 12px;font-size:16px;line-height:1.5;white-space:pre-line">${esc(b)}</p>`).join("")}
-${opts.button ? `<p style="margin:18px 0 8px"><a href="${esc(opts.button.href)}" style="display:inline-block;background:#FFD23F;color:#121417;border:2px solid #121417;padding:13px 22px;font-weight:bold;font-size:17px;text-decoration:none">${esc(opts.button.label)}</a></p>` : ""}
+${opts.button ? `<p style="margin:18px 0 8px"><a href="${esc(opts.button.href)}" style="display:inline-block;background:#FEF100;color:#121417;border:2px solid #121417;padding:13px 22px;font-weight:bold;font-size:17px;text-decoration:none">${esc(opts.button.label)}</a></p>` : ""}
 </td></tr>
 <tr><td style="padding:14px 22px 20px;border-top:2px solid #d4d8d1;font-size:12.5px;color:#51575f">${esc(opts.footer)}</td></tr>
 </table></td></tr></table></body></html>`;

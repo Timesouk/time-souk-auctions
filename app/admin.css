@@ -31,7 +31,7 @@
 .feed td { font-size: 13.5px; }
 .src { font-family: var(--f-mono); font-size: 11px; font-weight: 600; padding: 1px 6px; white-space: nowrap; }
 .src.stock { background: var(--ink); color: var(--paper); }
-.src.consign { background: var(--cyan); color: #fff; }
+.src.consign { background: var(--cyan); color: var(--ink); }
 .src.none { border: 1px dashed var(--ink-2); color: var(--ink-2); }
 .goal-bar { display: flex; height: 18px; border: 2px solid var(--ink); background: var(--card); }
 .goal-bar span { height: 100%; }
@@ -53,3 +53,15 @@
 .checklist li { display: flex; gap: 10px; align-items: baseline; }
 .checklist .yes { color: var(--green); font-weight: 900; }
 .checklist .no { color: var(--red-ink); font-weight: 900; }
+
+/* Timer length picker (settings, auction form, live console) */
+.timer-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.timer-pick :is(input:not([type="checkbox"]):not([type="radio"]), select) { width: auto; }
+.field .timer-pick :is(input:not([type="checkbox"]):not([type="radio"]), select) { width: auto; }
+.timer-pick select { min-width: 160px; }
+.timer-pick .mmss { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; color: var(--ink); }
+.field .timer-pick .mmss :is(input:not([type="checkbox"]):not([type="radio"])), .timer-pick .mmss input { width: 60px; text-align: center; font-variant-numeric: tabular-nums; }
+.timer-set { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 10px 12px; border: 2px dashed var(--ink); background: var(--tint); }
+.timer-set > .k { margin: 0; }
+.adm-top .logo { background: var(--paper); padding: 3px 6px; box-sizing: content-box; }
+.timer-pick select, .timer-pick .mmss input { font: inherit; font-size: 15px; font-weight: 600; color: var(--ink); background: var(--card); border: 2px solid var(--ink); border-radius: 0; padding: 7px 10px; }
