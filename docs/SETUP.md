@@ -60,7 +60,7 @@ Don't copy them anywhere else; leave this tab open and paste them straight into 
 ### 1.4 Sign-in by email code
 1. **Authentication → Sign In / Providers → Email**: make sure **Email** is enabled and **Allow new users to sign up** is on. Set **Email OTP expiration** to `600` seconds (10 minutes) and leave **Email OTP length** at `6`. Save.
 2. **Authentication → URL Configuration**: set **Site URL** to your website address (for now your `…vercel.app` address from Part 3; change it to `https://www.yourdomain.com` when your domain is connected). Add `https://www.yourdomain.com/**` under **Redirect URLs**.
-3. **Authentication → Emails → Templates**. The site signs people in with a **6-digit code**, not a link, so two templates must show the code. Edit **both "Confirm signup" and "Magic Link"**:
+3. **Authentication → Emails → Templates** (do this after Part 2.3: since June 2026 Supabase only lets new free projects edit these once custom SMTP is saved). The site signs people in with a **6-digit code**, not a link, so two templates must show the code. Edit **both "Confirm signup" and "Magic Link"**:
    - **Subject:** `Your Time Souk code · رمز تايم سوق`
    - **Body** (replace everything):
 
