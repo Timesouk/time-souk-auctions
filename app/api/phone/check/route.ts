@@ -17,6 +17,7 @@ export async function POST(req: Request) {
   if (limited(`check:${user.id}`, 10, 10 * 60e3)) return fail("too_many", 429);
 
   const r = await checkVerification(phone, code);
+  if (!r.ok) console.error("Phone code check failed", { ref: String(r.data.code || r.status), message: r.data.message });
   if (!r.approved) return fail("bad_code");
 
   const { error } = await adminClient()

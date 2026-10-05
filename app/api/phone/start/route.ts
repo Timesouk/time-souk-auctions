@@ -22,6 +22,11 @@ export async function POST(req: Request) {
   if (taken) return fail("phone_taken", 409);
 
   const r = await startVerification(phone, channel, body.locale === "ar" ? "ar" : "en");
-  if (!r.ok) return fail(r.status === 429 ? "too_many" : "send_failed", r.status === 429 ? 429 : 502);
+  if (!r.ok) {
+    // Twilio's own error code (for example 60605 = blocked country, 21608 = trial account) helps staff fix it.
+    const ref = String(r.data.code || r.status);
+    console.error("Phone code not sent", { ref, message: r.data.message, channel });
+    return json({ ok: false, error: r.status === 429 ? "too_many" : "send_failed", ref }, r.status === 429 ? 429 : 502);
+  }
   return json({ ok: true, phone });
 }

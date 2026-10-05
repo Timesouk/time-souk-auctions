@@ -112,7 +112,10 @@ export function JoinFlow({ locale, mode, next, payDays, channels }: {
     const r = await fetch("/api/phone/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ phone: e164, channel, locale }) });
     const j = await r.json().catch(() => ({}));
     setBusy(false);
-    if (!r.ok) return setErr(j.error === "phone_taken" ? a.phoneTaken : j.error === "too_many" ? a.tooMany : j.error === "bad_phone" ? a.badPhone : t.bid.errors.generic);
+    if (!r.ok) {
+      const known = j.error === "phone_taken" ? a.phoneTaken : j.error === "too_many" ? a.tooMany : j.error === "bad_phone" ? a.badPhone : "";
+      return setErr(known || `${t.bid.errors.generic} (${j.ref || j.error || r.status})`);
+    }
     setPhone(e164);
     setNote(a.phoneSent(e164));
     setCode("");
