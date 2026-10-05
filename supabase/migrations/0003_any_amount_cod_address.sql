@@ -1,4 +1,4 @@
-0003_any_amount_cod_address.sql-- The Time Souk · 0003: bid any amount, cash on delivery, delivery addresses.
+-- The Time Souk · 0003: bid any amount, cash on delivery, delivery addresses.
 -- Run once in the Supabase SQL Editor, after 0001 and 0002. Safe to run again.
 
 -- Delivery address on the bidder's profile (filled at sign-up, in the account page, or at checkout).
