@@ -193,7 +193,9 @@ test("cash on delivery is an allowed payment method and defaults to a 10 dirham 
   assert.equal(addr.delivery_address, "Office 5, Gate Village");
   assert.equal(addr.delivery_city, "Dubai");
   await db.query("update profiles set address = '', city = '' where id = $1", [A.id]);
-  await db.query("update invoices set method = 'cod', cod_fee = 10, cod_requested_at = now() where id = $1", [inv]);
+  // Cash on delivery is for deliveries within the UAE only.
+  await expectError(db.query("update invoices set cod_fee = 10, cod_requested_at = now(), delivery_country = 'Oman' where id = $1", [inv]), "new row for relation \"invoices\" violates check constraint \"invoices_cod_uae_check");
+  await db.query("update invoices set method = 'cod', cod_fee = 10, cod_requested_at = now(), delivery_country = 'United Arab Emirates' where id = $1", [inv]);
   const row = await one("select amount + cod_fee as total from invoices where id = $1", [inv]);
   assert.equal(row.total, 40010);
   await expectError(db.query("update invoices set method = 'cheque' where id = $1", [inv]), "new row for relation");

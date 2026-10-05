@@ -20,7 +20,7 @@ export function SettingsForm({ initial }: { initial: S }) {
           <span className="fine">Each auction can use its own timer (Auctions → the auction).</span>
         </div>
         <label className="field">Weekly lot target<input inputMode="numeric" {...n("lot_target")} /></label>
-        <label className="field">Cash on delivery charge (AED)<input inputMode="numeric" {...n("cod_fee")} /><span className="fine">Added to the bill when a buyer chooses cash on delivery.</span></label>
+        <label className="field">Cash on delivery charge (AED)<input inputMode="numeric" {...n("cod_fee")} /><span className="fine">Added to the bill when a buyer chooses cash on delivery (UAE deliveries only).</span></label>
         <label className="field">WhatsApp number (shown to bidders)<input type="tel" placeholder="+971 5X XXX XXXX" {...n("whatsapp")} /></label>
         <label className="field">Instagram handle<input placeholder="thetimesouk" {...n("instagram")} /></label>
         <label className="field">Contact email<input type="email" {...n("contact_email")} /></label>

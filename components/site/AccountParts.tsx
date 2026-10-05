@@ -2,10 +2,9 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { browserClient } from "@/lib/supabase/client";
-import { getDict } from "@/lib/i18n/dict";
+import { getDict, COUNTRY_VALUES } from "@/lib/i18n/dict";
 import type { Locale, MyStatus } from "@/lib/types";
 
-const COUNTRY_VALUES = ["United Arab Emirates", "Saudi Arabia", "Oman", "Qatar", "Bahrain", "Kuwait", "Other"];
 
 export function SignOutButton({ locale, label }: { locale: Locale; label: string }) {
   const router = useRouter();

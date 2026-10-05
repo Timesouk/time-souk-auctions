@@ -43,9 +43,10 @@ These involve approvals by other companies. Start them now and carry on with the
 2. In Supabase: **SQL Editor → New query**. Paste. Click **Run**. You should see **Success. No rows returned**.
 3. Do the same with `supabase/migrations/0002_timers.sql` (adjustable timers). Run it **after** 0001.
    Then `supabase/migrations/0003_any_amount_cod_address.sql` (bid any amount, cash on delivery, delivery addresses). Run it **after** 0002.
+   Then `supabase/migrations/0004_cod_uae_only.sql` (cash on delivery for UAE deliveries only). Run it **after** 0003.
 4. Check **Table Editor**: you should see tables such as `auctions`, `lots`, `bids`, `invoices`, `profiles`.
 
-> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 and 0003 are safe to run again.
+> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002, 0003 and 0004 are safe to run again.
 
 ### 1.3 Copy the API keys into Vercel later
 You'll need these three values in Part 3. Find them in **Project Settings → API Keys** (and **Project Settings → Data API** for the URL):
@@ -305,7 +306,7 @@ Use a separate test auction, number **99**, with 3 or 4 lots. Do it with a colle
 - [ ] When the bid reaches the reserve, the site shows **Pure sale**.
 - [ ] At 0:00 the lot closes on its own. A bid after 0:00 is refused.
 - [ ] Nothing is sent yet. Press **Send invoice** (tap twice): the winner gets the payment link by **email and WhatsApp**.
-- [ ] On the payment page, type a delivery address and choose **Cash on delivery**: the total goes up by the cash on delivery charge (AED 10 by default, **Admin → Settings**).
+- [ ] On the payment page, type a delivery address, keep the country as **United Arab Emirates** and choose **Cash on delivery**: the total goes up by the cash on delivery charge (AED 10 by default, **Admin → Settings**). Change the country to Oman: **Cash on delivery** greys out.
 - [ ] Pay one test invoice each way: **Ziina** test card, **Tabby** test account, **Tamara** sandbox, and **bank transfer** (mark it paid in **Admin → Payments**). Each shows **Paid** and the buyer gets a receipt.
 - [ ] **Reopen:** close a lot, reopen it, record a missed bid, **Hammer now**, then **Send invoice**: it goes to the new winner.
 - [ ] Afterwards: **Unpublish** auction 99 so it's hidden, and **Cancel** its test invoices in **Admin → Payments**.
@@ -361,7 +362,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 - **Instagram winners without an account:** in **Admin → Payments**, the invoice shows their `@handle`. Use **Copy pay link** to send it yourself, or once they register, enter their paddle number and press **Link & send payment link**.
 - The day before each invoice is due, a reminder goes out automatically (between 10 am and 8 pm Dubai time). **Resend email & WhatsApp** sends the link again at any time.
 - **Bank transfers:** when the money arrives, find the invoice → choose **Bank transfer** → **Mark paid**. The buyer gets a receipt.
-- **Cash on delivery:** the invoice shows *Cash on delivery · collect AED …* and the delivery address, and you get an email. Deliver, collect the cash, then choose **Cash on delivery** → **Mark paid**. Cash on delivery invoices never show as overdue and get no reminder.
+- **Cash on delivery (UAE deliveries only):** the invoice shows *Cash on delivery · collect AED …* and the delivery address, and you get an email. Deliver, collect the cash, then choose **Cash on delivery** → **Mark paid**. Cash on delivery invoices never show as overdue and get no reminder.
 - **Consignors:** each consigned lot shows the seller fee and what you owe the consignor. Press **Mark consignor paid** when you've paid them.
 - **Admin → Payments → Download CSV** gives your accountant every sale.
 
@@ -372,7 +373,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | Problem | Fix |
 |---|---|
 | Site still shows sample watches | Supabase variables missing, or you didn't redeploy after adding them. |
-| Site shows an error after connecting Supabase | Check all three database files ran: `0001_init.sql`, `0002_timers.sql`, then `0003_any_amount_cod_address.sql` (Part 1.2). |
+| Site shows an error after connecting Supabase | Check all four database files ran: `0001_init.sql`, `0002_timers.sql`, `0003_any_amount_cod_address.sql`, then `0004_cod_uae_only.sql` (Part 1.2). |
 | Can't change the timer on a lot | Its timer is running. Sudden death: stop it, or let it end and Reopen. |
 | No email code | Check Resend → **Logs**. Check Supabase SMTP settings (Part 2.3), and that the templates contain `{{ .Token }}`. Look in spam. |
 | Email code says "invalid" | Codes expire after 10 minutes and only the newest code works. Ask for a new one. |

@@ -34,7 +34,7 @@ public/brand/          the logo (site, emails); app/icon.png and the link-previe
 app/api/               phone codes, payments, provider webhooks, cron, uploads, CSV export
 components/            site, live bidding and admin components
 lib/                   formatting, auction rules, i18n (EN/AR), Supabase clients, invoices, notifications, payment providers
-supabase/migrations/   the database: tables, security rules and bidding engine (run 0001, then 0002, then 0003)
+supabase/migrations/   the database: tables, security rules and bidding engine (run 0001 to 0004 in order)
 supabase/tests/        bidding-engine tests on an in-memory Postgres
 docs/SETUP.md          deployment and run-of-show guide
 ```

@@ -4,12 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { browserClient } from "@/lib/supabase/client";
-import { getDict } from "@/lib/i18n/dict";
+import { getDict, COUNTRY_VALUES } from "@/lib/i18n/dict";
 import { toE164 } from "@/lib/format";
 import type { Locale, MyStatus } from "@/lib/types";
 
 type Step = "loading" | "email" | "code" | "details" | "phone" | "phonecode" | "done";
-const COUNTRY_VALUES = ["United Arab Emirates", "Saudi Arabia", "Oman", "Qatar", "Bahrain", "Kuwait", "Other"];
 
 export function JoinFlow({ locale, mode, next, payDays, channels }: {
   locale: Locale;

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { WatchArt } from "@/components/WatchArt";
 import { getSettings } from "@/lib/data";
-import { getDict, isLocale } from "@/lib/i18n/dict";
+import { COD_COUNTRY, COUNTRY_VALUES, getDict, isLocale } from "@/lib/i18n/dict";
 import { invoiceContext, invoiceTotal, lotTitle } from "@/lib/invoices";
 import { adminClient } from "@/lib/supabase/admin";
 import { ziinaReady } from "@/lib/payments/ziina";
@@ -41,6 +41,7 @@ export default async function PayPage({ params, searchParams }: P) {
   // Delivery address: the one given for this invoice, else the one saved in their profile.
   const addr = inv.delivery_address || c.buyer?.address || "";
   const city = inv.delivery_address ? inv.delivery_city || "" : c.buyer?.city || "";
+  const country = inv.delivery_country || (COUNTRY_VALUES.includes(c.buyer?.country || "") ? c.buyer!.country : COD_COUNTRY);
   const go = (m: string) => `/api/pay/${token}/${m}`;
   const who = (m?: string) => (m === "tabby" ? p.tabby : m === "tamara" ? p.tamara : p.card);
   const help = settings.whatsapp ? waLink(settings.whatsapp, `${p.invoice} ${inv.number}`) : "";
@@ -74,6 +75,7 @@ export default async function PayPage({ params, searchParams }: P) {
               <p className={overdue ? "alert" : "alert info"}>{overdue ? p.overdue : p.dueBy(dateLong(inv.due_date, locale))}</p>
             )}
             {sp.cod === "address" ? <p className="alert">{p.codNeedsAddress}</p> : null}
+            {sp.cod === "uae" ? <p className="alert">{p.codUaeOnly}</p> : null}
             {sp.status === "processing" ? <p className="alert info">{p.processing}</p> : null}
             {sp.status === "cancelled" ? <p className="alert">{p.cancelled}</p> : null}
             {sp.status === "failed" ? <p className="alert">{p.failed}</p> : null}
@@ -82,7 +84,7 @@ export default async function PayPage({ params, searchParams }: P) {
             {sp.unavailable ? <p className="alert">{p.unavailable(who(sp.unavailable))}</p> : null}
 
             {/* One form: whichever way they pay, the delivery address goes with it. */}
-            <form method="post" action={go("card")} className="stack" style={{ gap: 18 }}>
+            <form method="post" action={go("card")} className="stack payform" style={{ gap: 18 }}>
               <div className="stack" style={{ gap: 10 }}>
                 <h2 className="h3">{p.delivery}</h2>
                 <p className="fine">{p.deliveryNote}</p>
@@ -94,6 +96,12 @@ export default async function PayPage({ params, searchParams }: P) {
                   {p.city}
                   <input name="city" maxLength={80} defaultValue={city} autoComplete="address-level2" />
                 </label>
+                <label className="field">
+                  {p.country}
+                  <select name="country" defaultValue={country} autoComplete="country-name">
+                    {COUNTRY_VALUES.map((v, i) => <option key={v} value={v}>{t.countries[i]}</option>)}
+                  </select>
+                </label>
               </div>
 
               <h2 className="h3">{p.choose}</h2>
@@ -102,12 +110,13 @@ export default async function PayPage({ params, searchParams }: P) {
                 <button className="paybtn" type="submit" formAction={go("card")} disabled={!ziinaReady()}>{p.card}<small>{p.cardNote}</small></button>
                 <button className="paybtn" type="submit" formAction={go("tabby")} disabled={!tabbyReady() || !c.buyer}>{p.tabby}<small>{p.tabbyNote}</small></button>
                 <button className="paybtn" type="submit" formAction={go("tamara")} disabled={!tamaraReady() || !c.buyer}>{p.tamara}<small>{p.tamaraNote}</small></button>
-                <button className="paybtn" type="submit" formAction={go("cod")} disabled={cod}>
+                <button className="paybtn cod" type="submit" formAction={go("cod")} disabled={cod}>
                   {p.cod}
                   <small>{p.codNote(money(c.codFee, locale))}</small>
                   <small><b>{cod ? `✓ ${p.total} ${money(total, locale)}` : p.codButton(money(codTotal, locale))}</b></small>
                 </button>
               </div>
+              <p className="fine cod-uae-note">{p.codUaeOnly}</p>
 
               <div className="stack" style={{ gap: 10 }}>
                 <h2 className="h3">{p.bank}</h2>

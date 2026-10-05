@@ -94,7 +94,7 @@ const en = {
       ["Register once", "Free, with no deposit. Verify your email and mobile number in a minute and get your paddle number."],
       ["Pre-bid", "Leave a bid or a private maximum before the live. We bid for you, one step at a time."],
       ["Bid live", "Each lot is on the block for a fixed time. Bid any amount here or in the Instagram comments; both count."],
-      ["Pay in working days", "Card, bank transfer, Tabby, Tamara or cash on delivery. No buyer’s premium."]
+      ["Pay in working days", "Card, bank transfer, Tabby, Tamara, or cash on delivery in the UAE. No buyer’s premium."]
     ] as [string, string][],
     consignTitle: "Selling a watch?",
     consignBody: (fee: string) => `Put it in front of collectors across the UAE, Oman and Saudi Arabia every Saturday. Seller fee ${fee}%, no listing fee.`,
@@ -205,7 +205,7 @@ const en = {
     ] as [string, string][],
     pay: "What you pay",
     payBody: "Your winning bid, nothing on top. There is no buyer’s premium. Win a watch at AED 40,000 and you pay AED 40,000.",
-    payMethods: [["Card", "Secure payment link"], ["Bank transfer", "AED account in the UAE"], ["Tabby", "Split into 4 payments"], ["Tamara", "Split payments"], ["Cash on delivery", "Small delivery charge added"]] as [string, string][],
+    payMethods: [["Card", "Secure payment link"], ["Bank transfer", "AED account in the UAE"], ["Tabby", "Split into 4 payments"], ["Tamara", "Split payments"], ["Cash on delivery", "UAE only, small charge added"]] as [string, string][],
     payNote: (pay: number) => `Payment is due within ${pay} working days (Monday to Friday). Collect in Dubai, or we deliver across the UAE, Oman and Saudi Arabia at cost. Tabby and Tamara approve each purchase themselves and may not cover high amounts.`,
     reserve: "Reserves and “Pure sale”",
     reserveBody: "Most lots have a confidential reserve agreed with the seller. When bidding reaches it, the lot shows “Pure sale” here and we announce it on the live: the watch will sell to the highest bidder. Lots marked “No reserve” are pure sales from the first bid.",
@@ -362,7 +362,9 @@ const en = {
     addressPh: "Building or villa, street, area",
     city: "City",
     cod: "Cash on delivery",
-    codNote: (fee: string) => `Pay in cash when your watch is delivered. ${fee} is added for cash handling.`,
+    codNote: (fee: string) => `UAE only. Pay in cash when your watch is delivered. ${fee} is added for cash handling.`,
+    codUaeOnly: "Cash on delivery is only available for delivery within the UAE. Choose another way to pay.",
+    country: "Country",
     codButton: (total: string) => `Choose cash on delivery · ${total}`,
     codNeedsAddress: "Please enter your delivery address for cash on delivery.",
     codChosen: (total: string) => `Cash on delivery confirmed. Please have ${total} ready when your watch arrives. We’ll message you on WhatsApp to arrange delivery.`,
@@ -467,7 +469,7 @@ const ar: Dict = {
       ["سجّل مرة واحدة", "مجاناً وبدون تأمين. وثّق بريدك الإلكتروني ورقم هاتفك في دقيقة واحصل على رقم المزايدة."],
       ["زايد مسبقاً", "اترك مزايدة أو حداً أقصى خاصاً قبل البث المباشر. نزايد عنك خطوة بخطوة."],
       ["زايد مباشرة", "تُعرض كل قطعة لمدة محددة. زايد بأي مبلغ هنا أو في تعليقات إنستغرام، وكلاهما معتمد."],
-      ["ادفع خلال أيام عمل", "بالبطاقة أو التحويل البنكي أو تابي أو تمارا أو الدفع عند الاستلام. بدون عمولة على المشتري."]
+      ["ادفع خلال أيام عمل", "بالبطاقة أو التحويل البنكي أو تابي أو تمارا، أو الدفع عند الاستلام داخل الإمارات. بدون عمولة على المشتري."]
     ],
     consignTitle: "تريد بيع ساعتك؟",
     consignBody: (fee: string) => `اعرض ساعتك أمام هواة الساعات في الإمارات وعُمان والسعودية كل سبت. رسوم البائع ${fee}% وبدون رسوم إدراج.`,
@@ -578,7 +580,7 @@ const ar: Dict = {
     ],
     pay: "ماذا تدفع",
     payBody: "قيمة مزايدتك الفائزة فقط، بدون أي إضافات. لا توجد عمولة على المشتري. إذا فزت بساعة بـ 40,000 درهم تدفع 40,000 درهم.",
-    payMethods: [["بطاقة", "رابط دفع آمن"], ["تحويل بنكي", "حساب بالدرهم في الإمارات"], ["تابي", "قسّمها على 4 دفعات"], ["تمارا", "دفعات مقسّمة"], ["الدفع عند الاستلام", "تُضاف رسوم بسيطة"]],
+    payMethods: [["بطاقة", "رابط دفع آمن"], ["تحويل بنكي", "حساب بالدرهم في الإمارات"], ["تابي", "قسّمها على 4 دفعات"], ["تمارا", "دفعات مقسّمة"], ["الدفع عند الاستلام", "داخل الإمارات فقط، مع رسوم بسيطة"]],
     payNote: (pay: number) => `يُستحق الدفع خلال ${pay} أيام عمل (من الإثنين إلى الجمعة). الاستلام من دبي، أو نوصل داخل الإمارات وعُمان والسعودية بالتكلفة. تابي وتمارا يقرّران الموافقة على كل عملية شراء وقد لا يغطيان المبالغ الكبيرة.`,
     reserve: "الحد الأدنى و«البيع المؤكد»",
     reserveBody: "لمعظم القطع حد أدنى سرّي متفق عليه مع البائع. عندما تصل المزايدة إليه تظهر عبارة «بيع مؤكد» هنا ونعلنها في البث: ستُباع الساعة لأعلى مزايد. القطع المشار إليها «بدون حد أدنى» بيعها مؤكد من أول مزايدة.",
@@ -735,7 +737,9 @@ const ar: Dict = {
     addressPh: "المبنى أو الفيلا، الشارع، المنطقة",
     city: "المدينة",
     cod: "الدفع عند الاستلام",
-    codNote: (fee: string) => `ادفع نقداً عند توصيل ساعتك. تُضاف ${fee} رسوم التعامل النقدي.`,
+    codNote: (fee: string) => `داخل الإمارات فقط. ادفع نقداً عند توصيل ساعتك. تُضاف ${fee} رسوم التعامل النقدي.`,
+    codUaeOnly: "الدفع عند الاستلام متاح فقط للتوصيل داخل الإمارات. اختر طريقة دفع أخرى.",
+    country: "الدولة",
     codButton: (total: string) => `اختر الدفع عند الاستلام · ${total}`,
     codNeedsAddress: "يرجى إدخال عنوان التوصيل لاختيار الدفع عند الاستلام.",
     codChosen: (total: string) => `تم تأكيد الدفع عند الاستلام. يرجى تجهيز ${total} عند وصول ساعتك. سنراسلك عبر واتساب لترتيب التوصيل.`,
@@ -748,6 +752,11 @@ const ar: Dict = {
 };
 
 export const DICTS: Record<Locale, Dict> = { en, ar };
+
+/** Stored country values (English), in the same order as each dictionary's `countries` labels. */
+export const COUNTRY_VALUES = ["United Arab Emirates", "Saudi Arabia", "Oman", "Qatar", "Bahrain", "Kuwait", "Other"];
+/** Cash on delivery is only offered for deliveries here. */
+export const COD_COUNTRY = COUNTRY_VALUES[0];
 export const getDict = (locale: Locale) => DICTS[locale] || en;
 export const LOCALES: Locale[] = ["en", "ar"];
 export const isLocale = (v: string): v is Locale => v === "en" || v === "ar";

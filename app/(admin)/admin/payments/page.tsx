@@ -39,7 +39,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
       ig_handle: i.ig_handle, payUrl: payUrl(prof?.lang === "ar" ? "ar" : "en", i.pay_token),
       // Cash on delivery buyers pay when the watch arrives, so they're never "overdue".
       overdue: i.status !== "paid" && !i.cod_requested_at && i.due_date < today,
-      cod_fee: Number(i.cod_fee || 0), cod_requested_at: i.cod_requested_at || null, delivery_address: i.delivery_address || "", delivery_city: i.delivery_city || "",
+      cod_fee: Number(i.cod_fee || 0), cod_requested_at: i.cod_requested_at || null, delivery_address: i.delivery_address || "", delivery_city: i.delivery_city || "", delivery_country: i.delivery_country || "",
       lot: i.lots as { lot_number: number; brand: string; model: string }, buyer: prof,
       source: p?.source || null, consignor: p?.consignor_name || "", fee, payout: p?.source === "consign" ? i.amount - fee : 0,
       income: (p?.source === "consign" ? fee : i.amount - (p?.cost || 0)) + (i.cod_requested_at ? Number(i.cod_fee || 0) : 0),

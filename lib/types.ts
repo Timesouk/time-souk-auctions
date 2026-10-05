@@ -112,6 +112,7 @@ export type Invoice = {
   cod_requested_at?: string | null;
   delivery_address?: string;
   delivery_city?: string;
+  delivery_country?: string;
   paid_at: string | null;
   pay_token: string;
   notified_at: string | null;

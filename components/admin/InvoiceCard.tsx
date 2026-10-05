@@ -8,7 +8,7 @@ export type InvoiceCardData = {
   id: string; number: string; amount: number; due_date: string; status: string; method: string | null; paid_at: string | null;
   notified_at: string | null; notify_error: string | null; transfer_claimed_at: string | null; payout_paid_at: string | null;
   ig_handle: string | null; payUrl: string; overdue: boolean;
-  cod_fee: number; cod_requested_at: string | null; delivery_address: string; delivery_city: string;
+  cod_fee: number; cod_requested_at: string | null; delivery_address: string; delivery_city: string; delivery_country: string;
   lot: { lot_number: number; brand: string; model: string };
   buyer: { paddle: number; full_name: string; email: string; phone: string | null } | null;
   source: string | null; consignor: string; fee: number; payout: number; income: number;
@@ -40,7 +40,7 @@ export function InvoiceCard({ i }: { i: InvoiceCardData }) {
         )}
       </div>
       <div className="fine">
-        {i.delivery_address ? <>Deliver to: <b>{i.delivery_address}{i.delivery_city ? `, ${i.delivery_city}` : ""}</b></> : "No delivery address yet (collection, or ask the buyer)."}
+        {i.delivery_address ? <>Deliver to: <b>{[i.delivery_address, i.delivery_city, i.delivery_country].filter(Boolean).join(", ")}</b></> : "No delivery address yet (collection, or ask the buyer)."}
       </div>
       <div className="row" style={{ gap: 8 }}>
         <span className={`pill ${i.status === "paid" ? "ok" : i.overdue ? "warn" : ""}`}>{state}</span>

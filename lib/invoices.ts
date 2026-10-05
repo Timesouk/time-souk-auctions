@@ -10,7 +10,7 @@ export type InvoiceCtx = {
   invoice: Invoice;
   lot: { id: string; lot_number: number; brand: string; model: string; reference: string; photos: string[]; case_material: string; bracelet: string; dial_colour: string; bezel: string; shape: string; hands: string };
   auction: { id: string; number: number; sale_date: string };
-  buyer: { id: string; full_name: string; email: string; phone: string | null; lang: Locale; paddle: number; created_at: string; address: string; city: string } | null;
+  buyer: { id: string; full_name: string; email: string; phone: string | null; lang: Locale; paddle: number; created_at: string; address: string; city: string; country: string } | null;
   lang: Locale;
   payUrl: string;
   /** The cash on delivery charge from Settings (what COD would add to this invoice). */
@@ -34,7 +34,7 @@ export async function invoiceContext(by: { id?: string; token?: string }): Promi
     db.from("lots").select("id,lot_number,brand,model,reference,photos,case_material,bracelet,dial_colour,bezel,shape,hands").eq("id", invoice.lot_id).single(),
     db.from("auctions").select("id,number,sale_date").eq("id", invoice.auction_id).single(),
     invoice.bidder_id
-      ? db.from("profiles").select("id,full_name,email,phone,lang,paddle,created_at,address,city").eq("id", invoice.bidder_id).maybeSingle()
+      ? db.from("profiles").select("id,full_name,email,phone,lang,paddle,created_at,address,city,country").eq("id", invoice.bidder_id).maybeSingle()
       : Promise.resolve({ data: null }),
     db.from("settings").select("*").eq("id", 1).maybeSingle()
   ]);
@@ -54,11 +54,11 @@ function wonCopy(c: InvoiceCtx, reminder = false) {
   const name = firstName(c.buyer?.full_name || "");
   const fee = money(c.codFee, lang);
   const waysEn = c.codFee
-    ? `Pay by card, Tabby, Tamara or bank transfer, or choose cash on delivery (${fee} added).`
-    : "Pay by card, Tabby, Tamara or bank transfer, or choose cash on delivery.";
+    ? `Pay by card, Tabby, Tamara or bank transfer, or choose cash on delivery in the UAE (${fee} added).`
+    : "Pay by card, Tabby, Tamara or bank transfer, or choose cash on delivery in the UAE.";
   const waysAr = c.codFee
-    ? `يمكنك الدفع بالبطاقة أو تابي أو تمارا أو التحويل البنكي، أو اختيار الدفع عند الاستلام (تُضاف ${fee}).`
-    : "يمكنك الدفع بالبطاقة أو تابي أو تمارا أو التحويل البنكي، أو اختيار الدفع عند الاستلام.";
+    ? `يمكنك الدفع بالبطاقة أو تابي أو تمارا أو التحويل البنكي، أو اختيار الدفع عند الاستلام داخل الإمارات (تُضاف ${fee}).`
+    : "يمكنك الدفع بالبطاقة أو تابي أو تمارا أو التحويل البنكي، أو اختيار الدفع عند الاستلام داخل الإمارات.";
   if (lang === "ar") {
     return {
       subject: reminder ? `تذكير: ادفع قبل ${due} · ${title}` : `مبروك! فزت بـ ${title}`,

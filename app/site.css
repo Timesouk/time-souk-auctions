@@ -379,6 +379,10 @@ tr:last-child td { border-bottom: 0; }
 .paybtn small { font-weight: 500; font-size: 13.5px; color: var(--ink-2); }
 .paybtn:hover { background: var(--yellow); box-shadow: var(--shadow); }
 .paybtn[disabled] { opacity: 0.45; cursor: not-allowed; box-shadow: none; background: var(--card); }
+/* Cash on delivery is UAE only: greyed out (the server refuses it too) unless the delivery country is the UAE. */
+.cod-uae-note { display: none; }
+.payform:has(select[name="country"] option[value="United Arab Emirates"]:not(:checked)) .paybtn.cod { opacity: 0.45; pointer-events: none; box-shadow: none; background: var(--card); }
+.payform:has(select[name="country"] option[value="United Arab Emirates"]:not(:checked)) .cod-uae-note { display: block; }
 .bankbox { border: 2px dashed var(--ink); padding: 14px 16px; white-space: pre-line; font-family: var(--f-mono); font-size: 14px; background: var(--card); }
 .amount-due { font-size: clamp(48px, 9vw, 84px); line-height: 0.95; }
 

@@ -8,6 +8,7 @@ import { tamaraCreate, tamaraReady } from "@/lib/payments/tamara";
 import { emailHtml, emailReady, sendEmail, staffEmails } from "@/lib/notify/email";
 import { money } from "@/lib/format";
 import { clientIp, limited } from "@/lib/http";
+import { COD_COUNTRY, COUNTRY_VALUES } from "@/lib/i18n/dict";
 
 type P = { params: Promise<{ token: string; method: string }> };
 
@@ -32,20 +33,42 @@ export async function POST(req: Request, { params }: P) {
   const form = await req.formData().catch(() => null);
   const address = str(form?.get("address"), 500);
   const city = str(form?.get("city"), 80);
-  const delivery = { address: address || c.invoice.delivery_address || "", city: address ? city : c.invoice.delivery_city || "" };
-  if (address && (address !== c.invoice.delivery_address || city !== c.invoice.delivery_city)) {
-    await db.from("invoices").update({ delivery_address: address, delivery_city: city, updated_at: now }).eq("id", c.invoice.id);
+  const picked = str(form?.get("country"), 60);
+  const country = COUNTRY_VALUES.includes(picked) ? picked : "";
+  const delivery = {
+    address: address || c.invoice.delivery_address || "",
+    city: address ? city : c.invoice.delivery_city || "",
+    country: country || c.invoice.delivery_country || c.buyer?.country || ""
+  };
+  // Any other way to pay replaces cash on delivery, so its charge no longer applies.
+  if (method !== "cod" && c.invoice.cod_requested_at) {
+    await db.from("invoices").update({ cod_requested_at: null, cod_fee: 0, updated_at: now }).eq("id", c.invoice.id);
+  }
+  if (
+    (address && (address !== c.invoice.delivery_address || city !== c.invoice.delivery_city)) ||
+    (country && country !== c.invoice.delivery_country)
+  ) {
+    await db.from("invoices").update({
+      ...(address ? { delivery_address: address, delivery_city: city } : {}),
+      ...(country ? { delivery_country: country } : {}),
+      updated_at: now
+    }).eq("id", c.invoice.id);
     // Save it to their profile too, if they haven't given one before.
-    if (c.buyer && !c.buyer.address) await db.from("profiles").update({ address, city }).eq("id", c.buyer.id);
+    if (address && c.buyer && !c.buyer.address) await db.from("profiles").update({ address, city }).eq("id", c.buyer.id);
   }
 
   if (method === "cod") {
     if (!delivery.address) return back("cod=address");
+    // Cash on delivery: deliveries within the UAE only.
+    if (delivery.country !== COD_COUNTRY) return back("cod=uae");
     const fee = c.codFee;
-    await db.from("invoices").update({ cod_requested_at: now, cod_fee: fee, transfer_claimed_at: null, updated_at: now }).eq("id", c.invoice.id);
+    const { error: codError } = await db.from("invoices")
+      .update({ cod_requested_at: now, cod_fee: fee, delivery_country: COD_COUNTRY, transfer_claimed_at: null, updated_at: now })
+      .eq("id", c.invoice.id);
+    if (codError) return back("status=failed");
     await db.from("events").insert({ kind: "invoice_cod", data: { invoice_id: c.invoice.id, fee } });
     const total = amount + fee;
-    const where = `${delivery.address}${delivery.city ? ", " + delivery.city : ""}`;
+    const where = `${delivery.address}${delivery.city ? ", " + delivery.city : ""}, UAE`;
     const staff = staffEmails();
     if (staff.length && emailReady()) {
       const line = `${c.invoice.number} · ${lotTitle(c.lot, "en")} · collect ${money(total)} (incl. ${money(fee)} cash on delivery)${c.buyer ? ` · paddle ${c.buyer.paddle} ${c.buyer.full_name} · ${c.buyer.phone || "no phone"}` : ""}`;
@@ -62,10 +85,6 @@ export async function POST(req: Request, { params }: P) {
     return back("status=cod");
   }
 
-  // Any other way to pay replaces cash on delivery, so its charge no longer applies.
-  if (c.invoice.cod_requested_at) {
-    await db.from("invoices").update({ cod_requested_at: null, cod_fee: 0, updated_at: now }).eq("id", c.invoice.id);
-  }
 
   if (method === "transfer") {
     await db.from("invoices").update({ transfer_claimed_at: now, updated_at: now }).eq("id", c.invoice.id);
