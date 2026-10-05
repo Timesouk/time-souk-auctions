@@ -70,7 +70,9 @@ export function Catalogue({ locale, limit }: { locale: Locale; limit?: number })
   }, [lots]);
 
   if (limit) {
-    const top = lots.slice().sort((a, b) => b.estimate_high - a.estimate_high || a.lot_number - b.lot_number).slice(0, limit);
+    // Highlights: the highest estimates (or starting bids, when there's no estimate) first.
+    const rank = (l: Lot) => l.estimate_high || l.estimate_low || l.current_bid || l.start_price || 0;
+    const top = lots.slice().sort((a, b) => rank(b) - rank(a) || a.lot_number - b.lot_number).slice(0, limit);
     return (
       <div className="grid">
         {top.map(l => <LotCard key={l.id} locale={locale} lot={l} />)}

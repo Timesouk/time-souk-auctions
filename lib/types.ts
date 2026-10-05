@@ -43,8 +43,9 @@ export type Lot = {
   condition: string;
   notes_en: string;
   notes_ar: string;
-  estimate_low: number;
-  estimate_high: number;
+  /** Optional: empty means no estimate is shown. */
+  estimate_low: number | null;
+  estimate_high: number | null;
   start_price: number;
   no_reserve: boolean;
   reserve_met: boolean;

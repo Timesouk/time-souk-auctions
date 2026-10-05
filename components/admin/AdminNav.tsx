@@ -2,21 +2,23 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const LINKS: [string, string][] = [
+// The third value marks admin-only pages.
+const LINKS: [string, string, boolean?][] = [
   ["/admin/live", "Live console"],
   ["/admin/auctions", "Auctions & lots"],
   ["/admin/bidders", "Bidders"],
   ["/admin/payments", "Winners & payments"],
   ["/admin/consignments", "Consignments"],
-  ["/admin/settings", "Settings"]
+  ["/admin/staff", "Staff", true],
+  ["/admin/settings", "Settings", true]
 ];
 
-export function AdminNav() {
+export function AdminNav({ isAdmin }: { isAdmin: boolean }) {
   const path = usePathname() || "";
   return (
     <nav className="adm-nav" aria-label="Admin">
       <div className="wrap">
-        {LINKS.map(([href, label]) => (
+        {LINKS.filter(([, , adminOnly]) => isAdmin || !adminOnly).map(([href, label]) => (
           <Link key={href} href={href} aria-current={path.startsWith(href) ? "page" : undefined}>{label}</Link>
         ))}
       </div>

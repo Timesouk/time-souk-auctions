@@ -22,7 +22,7 @@ export type ImportedLot = {
   pub: {
     brand: string; model: string; reference: string; year: string; case_size: string; case_material: string; dial: string;
     dial_colour: string; bezel: string; shape: string; hands: string; bracelet: string; has_box: boolean; has_papers: boolean;
-    condition: string; notes_en: string; estimate_low: number; estimate_high: number; start_price: number; no_reserve: boolean; photos: string[];
+    condition: string; notes_en: string; estimate_low: number | null; estimate_high: number | null; start_price: number; no_reserve: boolean; photos: string[];
   };
   priv: { reserve: number | null; source: "stock" | "consign"; cost: number | null; consignor_name: string; consignor_phone: string; seller_fee: number | null };
 };
@@ -68,10 +68,10 @@ export function parsePaste(text: string): { lots: ImportedLot[]; skipped: number
       skipped.push(i + 2);
       return;
     }
-    const lo = toNum(o.lo);
+    // Estimates are optional; an empty starting bid means 0.
+    const lo = toNum(o.lo) || toNum(o.hi) || null;
     const hi = toNum(o.hi) || lo;
-    let start = toNum(o.start);
-    if (!start) start = Math.max(500, Math.round((lo * 0.7) / 500) * 500);
+    const start = toNum(o.start) || 0;
     const style = /chrono/i.test(o.style || "") ? "chrono" : /gmt/i.test(o.style || "") ? "gmt" : o.style ? "three"
       : /chrono|daytona|speedmaster|navitimer|monaco|chronomat|el primero/i.test(o.model) ? "chrono" : /gmt/i.test(o.model) ? "gmt" : "three";
     const shape = /square/i.test(o.shape || "") ? "square" : /cushion|tonneau/i.test(o.shape || "") ? "cushion" : /rect|tank/i.test(o.shape || "") ? "rect" : "round";

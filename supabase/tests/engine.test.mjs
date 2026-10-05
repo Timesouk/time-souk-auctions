@@ -181,6 +181,38 @@ test("delivery address: saved at sign-up, kept when not sent, and shown to the b
   }
 });
 
+test("lots can start at 0 with no estimates: first bid from AED 1, a lone max bid holds at AED 1", async () => {
+  const auc = await makeAuction();
+  lotNo += 1;
+  const lot = (await one(
+    `insert into lots (auction_id, lot_number, brand, model, start_price, no_reserve) values ($1, $2, 'Tudor', 'Ranger', 0, true) returning id`,
+    [auc, lotNo]
+  )).id;
+  await db.query("insert into lot_private (lot_id) values ($1)", [lot]);
+  const row = await lotRow(lot);
+  assert.equal(row.estimate_low, null);
+  assert.equal(row.start_price, 0);
+  await expectError(bid(A, lot, 0), "invalid_amount");
+  const r = await bid(A, lot, 20000, "max");
+  assert.equal(r.price, 1);
+  const r2 = await bid(B, lot, 750);
+  assert.equal(r2.leading, false);
+  assert.equal(r2.price, 800);
+  await expectError(db.query("update lots set start_price = -1 where id = $1", [lot]), "new row for relation");
+  await expectError(db.query("update lots set estimate_low = 5000, estimate_high = 4000 where id = $1", [lot]), "new row for relation");
+  await db.query("update lots set estimate_low = 5000, estimate_high = null where id = $1", [lot]);
+});
+
+test("only one admin; staff logins are unique", async () => {
+  const X = await makeUser("admin2@test.ae");
+  const Y = await makeUser("staffy@test.ae");
+  const admins = Number((await one("select count(*) n from profiles where role = 'admin'")).n);
+  if (admins === 0) await db.query("update profiles set role = 'admin' where id = $1", [X.id]);
+  await expectError(db.query("update profiles set role = 'admin' where id = $1", [Y.id]), "duplicate key value");
+  await db.query("update profiles set role = 'staff', staff_login = 'ahmed' where id = $1", [X.id]);
+  await expectError(db.query("update profiles set staff_login = 'ahmed' where id = $1", [Y.id]), "duplicate key value");
+});
+
 test("cash on delivery is an allowed payment method and defaults to a 10 dirham fee", async () => {
   assert.equal((await one("select cod_fee from settings where id = 1")).cod_fee, 10);
   const auc = await makeAuction();

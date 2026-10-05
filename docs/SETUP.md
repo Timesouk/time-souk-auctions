@@ -44,9 +44,10 @@ These involve approvals by other companies. Start them now and carry on with the
 3. Do the same with `supabase/migrations/0002_timers.sql` (adjustable timers). Run it **after** 0001.
    Then `supabase/migrations/0003_any_amount_cod_address.sql` (bid any amount, cash on delivery, delivery addresses). Run it **after** 0002.
    Then `supabase/migrations/0004_cod_uae_only.sql` (cash on delivery for UAE deliveries only). Run it **after** 0003.
+   Then `supabase/migrations/0005_optional_estimates_zero_start.sql` (optional estimates, AED 0 starting bids, staff logins, one admin). Run it **after** 0004.
 4. Check **Table Editor**: you should see tables such as `auctions`, `lots`, `bids`, `invoices`, `profiles`.
 
-> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002, 0003 and 0004 are safe to run again.
+> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0005 are safe to run again.
 
 ### 1.3 Copy the API keys into Vercel later
 You'll need these three values in Part 3. Find them in **Project Settings → API Keys** (and **Project Settings → Data API** for the URL):
@@ -255,7 +256,9 @@ Then in the Tamara Partner Portal: **Settings → General Settings → Webhooks 
    ```
 3. Go to `https://www.yourdomain.com/admin`. You're in.
 
-**Adding staff:** ask each staff member to register on the site, then **Admin → Bidders →** find them **→ Role → staff**. Staff can run the live console and manage lots; only admins change roles.
+**Adding staff:** **Admin → Staff → Create a staff login**: their name, a staff ID (e.g. `ahmed`) and a password (**Make one** creates a strong one). Send them the details shown (the password is shown only once). They sign in at `https://www.yourdomain.com/admin` with the staff ID and password; no email or phone code. Forgotten password: type a new one on the Staff page and **Save password**. Someone leaving: **Turn off access**.
+
+Staff can run the live console and manage lots, bidders and payments. Only you (the one admin) can change **Settings**, manage **Staff**, change roles and reset auctions. The site allows only one admin.
 
 ---
 
@@ -279,7 +282,7 @@ Then in the Tamara Partner Portal: **Settings → General Settings → Webhooks 
 2. **Add lots.** Two ways:
    - **Paste from Excel or Google Sheets:** on the auction page, **Paste lots from Excel → Copy header row**, and paste it into row 1 of a new sheet. The columns are:
      `Brand, Model, Ref, Year, Size mm, Case, Dial, Dial colour, Bezel, Shape, Hands, Bracelet, Box, Papers, Condition, Est low, Est high, Start bid, No reserve, Reserve, Source, Cost, Consignor, Consignor phone, Seller fee %, Photo link, Notes`.
-     Fill one row per watch (Brand and Model are required; leave Start bid empty to use about 70% of the low estimate). Select the rows **including the header**, copy, paste into the box, check the summary under it, then press the import button.
+     Fill one row per watch (Brand and Model are required). Estimates are optional: leave Est low and Est high empty and no estimate is shown. An empty Start bid means AED 0 (bidding opens at any amount). **Start every lot at AED 0** on the auction page sets all lots without bids to 0 at once. Select the rows **including the header**, copy, paste into the box, check the summary under it, then press the import button.
    - **One at a time:** **Add a lot** on the auction page.
    - **From a consignment request:** **Admin → Consignments → Create lot** copies the seller's details into a new lot.
 3. **Photos.** Open each lot and drag photos onto the drop area. The first photo is the cover; use ← → to reorder. Photos are resized automatically. Until a lot has photos, the site shows a drawing of the watch.
@@ -374,7 +377,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | Problem | Fix |
 |---|---|
 | Site still shows sample watches | Supabase variables missing, or you didn't redeploy after adding them. |
-| Site shows an error after connecting Supabase | Check all four database files ran: `0001_init.sql`, `0002_timers.sql`, `0003_any_amount_cod_address.sql`, then `0004_cod_uae_only.sql` (Part 1.2). |
+| Site shows an error after connecting Supabase | Check all five database files ran, in order: `0001` to `0005` (Part 1.2). |
 | Can't change the timer on a lot | Its timer is running. Sudden death: stop it, or let it end and Reopen. |
 | No email code | Check Resend → **Logs**. Check Supabase SMTP settings (Part 2.3), and that the templates contain `{{ .Token }}`. Look in spam. |
 | Email code says "invalid" | Codes expire after 10 minutes and only the newest code works. Ask for a new one. |

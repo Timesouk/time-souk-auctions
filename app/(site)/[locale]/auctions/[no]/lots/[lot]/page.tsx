@@ -8,7 +8,7 @@ import { BidHistory } from "@/components/live/BidHistory";
 import { Gallery, LotStatusBlock } from "@/components/live/LotView";
 import { getAuctionByNumber, getBidHistory, getMyStatus, getSettings } from "@/lib/data";
 import { getDict, isLocale } from "@/lib/i18n/dict";
-import { lotPath } from "@/lib/auction";
+import { estimateText, lotPath } from "@/lib/auction";
 import { money, num, pad2, waLink } from "@/lib/format";
 
 type P = { params: Promise<{ locale: string; no: string; lot: string }> };
@@ -29,7 +29,10 @@ export async function generateMetadata({ params }: P): Promise<Metadata> {
   const title = `${t.common.lotN(pad2(d.lot.lot_number))} · ${d.lot.brand} ${d.lot.model}`;
   return {
     title,
-    description: `${t.common.estimate} ${money(d.lot.estimate_low, locale)} – ${num(d.lot.estimate_high)}. ${t.home.auctionN(pad2(d.auction.number))}.`,
+    description: [
+      estimateText(d.lot, n => money(n, locale), num) ? `${t.common.estimate} ${estimateText(d.lot, n => money(n, locale), num)}.` : "",
+      `${t.home.auctionN(pad2(d.auction.number))}.`
+    ].filter(Boolean).join(" "),
     openGraph: { title, images: d.lot.photos[0] ? [d.lot.photos[0]] : undefined }
   };
 }
@@ -54,7 +57,7 @@ export default async function LotPage({ params }: P) {
     [f.dial, lot.dial], [f.bracelet, lot.bracelet],
     [f.box, lot.has_box ? t.common.yes : t.common.no], [f.papers, lot.has_papers ? t.common.yes : t.common.no],
     [f.condition, t.common.conditions[lot.condition] || lot.condition],
-    [f.estimate, `${money(lot.estimate_low, locale)} – ${num(lot.estimate_high)}`],
+    [f.estimate, estimateText(lot, n => money(n, locale), num)],
     [f.start, money(lot.start_price, locale)]
   ].filter(([, v]) => v) as [string, string][];
   const ask = settings.whatsapp ? waLink(settings.whatsapp, t.lot.askText(pad2(lot.lot_number), `${lot.brand} ${lot.model} ${lot.reference}`.trim())) : "";

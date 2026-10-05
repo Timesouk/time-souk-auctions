@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AuctionForm, AuctionStatusButtons } from "@/components/admin/AuctionForm";
-import { ImportLots, RehearsalReset, Relist } from "@/components/admin/ImportLots";
+import { ImportLots, RehearsalReset, Relist, ZeroStarts } from "@/components/admin/ImportLots";
 import { adminClient } from "@/lib/supabase/admin";
 import { IS_PREVIEW } from "@/lib/env";
 import { dateLong, dubaiParts, num, pad2, stamp } from "@/lib/format";
@@ -74,6 +74,7 @@ export default async function AuctionAdmin({ params }: { params: Promise<{ id: s
       <div className="row">
         <Link className="btn pri" href={`/admin/lots/new?auction=${auction.id}`}>Add a lot</Link>
         <Link className="btn" href={`/en/auctions/${auction.number}`} target="_blank">View on the website</Link>
+        {lots?.length ? <ZeroStarts auctionId={auction.id} /> : null}
       </div>
 
       {lots?.length ? (
@@ -89,7 +90,7 @@ export default async function AuctionAdmin({ params }: { params: Promise<{ id: s
                     <td className="mono">{pad2(l.lot_number)}</td>
                     <td><b>{l.brand}</b> {l.model}<br /><span className="ref">{l.reference}</span></td>
                     <td>{p ? <span className={`src ${p.source}`}>{p.source === "consign" ? "Consign" : "Own"}</span> : <span className="src none">—</span>}</td>
-                    <td className="n">{num(l.estimate_low)}–{num(l.estimate_high)}</td>
+                    <td className="n">{l.estimate_low ? `${num(l.estimate_low)}–${num(l.estimate_high)}` : "—"}</td>
                     <td className="n">{num(l.start_price)}</td>
                     <td className="n">{l.no_reserve ? "None" : p?.reserve ? num(p.reserve) : <span className="urgent">Not set</span>}</td>
                     <td className="n">{l.current_bid == null ? "—" : `${num(l.current_bid)} (${l.bid_count})`}</td>

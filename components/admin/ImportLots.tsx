@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Msg, useAction } from "./ui";
-import { importLots, relistLots, resetAuctionForRehearsal } from "@/app/(admin)/admin/actions";
+import { ConfirmButton, Msg, useAction } from "./ui";
+import { importLots, relistLots, resetAuctionForRehearsal, zeroStartPrices } from "@/app/(admin)/admin/actions";
 import { HEAD_COLS, parsePaste } from "@/lib/import";
 
 export function ImportLots({ auctionId }: { auctionId: string }) {
@@ -10,7 +10,7 @@ export function ImportLots({ auctionId }: { auctionId: string }) {
   const parsed = parsePaste(text);
   return (
     <div className="stack" style={{ gap: 10 }}>
-      <p className="fine">Copy rows from your stock sheet, including the header row, and paste them here. Brand and Model are required; leave Start bid empty for about 70% of the low estimate.</p>
+      <p className="fine">Copy rows from your stock sheet, including the header row, and paste them here. Brand and Model are required. Estimates are optional (leave them empty to hide them), and an empty Start bid means 0.</p>
       <div className="row">
         <button className="btn sm" type="button" onClick={() => navigator.clipboard?.writeText(HEAD_COLS.join("\t"))}>Copy header row</button>
         <span className="fine">Paste it into row 1 of a new sheet to get the columns right.</span>
@@ -71,5 +71,16 @@ export function RehearsalReset({ auctionId, number }: { auctionId: string; numbe
       </div>
       <Msg r={msg} />
     </div>
+  );
+}
+
+/** One click: every lot in the auction without bids starts at AED 0. */
+export function ZeroStarts({ auctionId }: { auctionId: string }) {
+  const { pending, msg, run } = useAction();
+  return (
+    <>
+      <ConfirmButton className="btn" label="Start every lot at AED 0" confirm="Set all starting bids to 0? Tap again" disabled={pending} onConfirm={() => run(() => zeroStartPrices(auctionId))} />
+      <Msg r={msg} />
+    </>
   );
 }

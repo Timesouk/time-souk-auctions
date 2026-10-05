@@ -8,6 +8,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminNav } from "@/components/admin/AdminNav";
 import { AdminSignOut } from "@/components/admin/ui";
+import { StaffSignIn } from "@/components/admin/Staff";
+import { serverClient } from "@/lib/supabase/server";
 import { Logo } from "@/components/Logo";
 import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
@@ -18,6 +20,13 @@ export const dynamic = "force-dynamic";
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const staff = IS_PREVIEW ? null : await getStaff();
   const allowed = IS_PREVIEW || !!staff;
+  // Signed in, but not as staff (e.g. a bidder account): say so on the sign-in box.
+  let other: string | null = null;
+  if (!allowed) {
+    const sb = await serverClient();
+    const { data } = sb ? await sb.auth.getUser() : { data: { user: null } };
+    other = data.user?.email || null;
+  }
   return (
     <html lang="en" dir="ltr">
       <body>
@@ -28,23 +37,14 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <strong className="mono" style={{ color: "var(--yellow)" }}>ADMIN</strong>
               <span className="who">
                 {IS_PREVIEW ? "Preview mode: sample data, nothing is saved" : staff ? `${staff.name} · ${staff.role}` : "Not signed in"} · <Link href="/en">View site</Link>
-                {staff ? <> · <AdminSignOut /></> : null}
+                {staff || other ? <> · <AdminSignOut /></> : null}
               </span>
             </div>
           </div>
-          {allowed ? <AdminNav /> : null}
+          {allowed ? <AdminNav isAdmin={IS_PREVIEW || staff?.role === "admin"} /> : null}
           <main className="adm-main">
             <div className="wrap">
-              {allowed ? children : (
-                <div className="panel-card" style={{ maxWidth: 560 }}>
-                  <h1 className="disp">Staff only</h1>
-                  <p>Sign in with a staff account to use the admin.</p>
-                  <div className="row">
-                    <Link className="btn pri" href="/en/sign-in?next=/admin">Sign in</Link>
-                  </div>
-                  <p className="fine">To make someone staff, see “Make yourself an admin” in the setup guide.</p>
-                </div>
-              )}
+              {allowed ? children : <StaffSignIn signedInAs={other} />}
             </div>
           </main>
         </div>

@@ -11,7 +11,7 @@ export default async function BiddersPage({ searchParams }: { searchParams: Prom
   const qv = String(sp.q || "").trim();
   const me = await getStaff();
   const db = adminClient();
-  let query = db.from("profiles").select("id, paddle, full_name, email, phone, phone_verified_at, country, address, city, instagram, instagram_confirmed, role, suspended, terms_accepted_at, created_at").order("paddle", { ascending: false }).limit(300);
+  let query = db.from("profiles").select("id, paddle, full_name, email, phone, phone_verified_at, country, address, city, instagram, instagram_confirmed, role, suspended, terms_accepted_at, created_at").is("staff_login", null).order("paddle", { ascending: false }).limit(300);
   if (qv) {
     const safe = qv.replace(/[,()%]/g, "");
     query = /^\d+$/.test(safe)

@@ -175,13 +175,14 @@ export function LotForm({ id, auctionId, auctionLabel, lotNumber, bidCount, init
       <div className="panel-card">
         <span className="k">Auction terms · public</span>
         <div className="form-grid">
-          <label className="field">Estimate low (AED)<input inputMode="numeric" required {...text("estimate_low")} /></label>
-          <label className="field">Estimate high (AED)<input inputMode="numeric" required {...text("estimate_high")} /></label>
-          <label className="field">Starting bid (AED)<input inputMode="numeric" required readOnly={bidCount > 0} {...text("start_price")} /></label>
+          <label className="field">Estimate low (AED, optional)<input inputMode="numeric" placeholder="Leave empty to hide" {...text("estimate_low")} /></label>
+          <label className="field">Estimate high (AED, optional)<input inputMode="numeric" placeholder="Leave empty to hide" {...text("estimate_high")} /></label>
+          <label className="field">Starting bid (AED)<input inputMode="numeric" placeholder="0" readOnly={bidCount > 0} {...text("start_price")} /></label>
           <label className="check" style={{ alignSelf: "end", paddingBottom: 12 }}>
             <input type="checkbox" checked={p.no_reserve} onChange={e => setP("no_reserve", e.target.checked)} /> No reserve (pure sale from the first bid)
           </label>
         </div>
+        <p className="fine">Estimates are optional: leave both empty and no estimate is shown on the website. A starting bid of 0 (or empty) lets bidding open at any amount.</p>
         {bidCount > 0 ? <p className="fine">This lot has bids, so its starting bid is locked.</p> : null}
       </div>
 

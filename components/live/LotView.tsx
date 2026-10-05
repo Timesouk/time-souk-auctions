@@ -4,7 +4,7 @@ import { useLive, useTick } from "./LiveProvider";
 import { PureTag, StatusPill, TimerBox, whoLabel } from "./parts";
 import { WatchArt } from "../WatchArt";
 import { getDict } from "@/lib/i18n/dict";
-import { isPure } from "@/lib/auction";
+import { estimateText, isPure } from "@/lib/auction";
 import { money, num, pad2, stamp } from "@/lib/format";
 import type { Locale, Lot } from "@/lib/types";
 
@@ -52,7 +52,7 @@ export function LotStatusBlock({ locale, lotId }: { locale: Locale; lotId: strin
         <span className="k">{label}{p != null ? ` · ${whoLabel(locale, lot.leader_paddle, lot.leader_via)}` : ""}</span>
         <div className="bigp num">{money(p ?? lot.start_price, locale)}</div>
         <div className="row" style={{ gap: "4px 14px", marginTop: 6 }}>
-          <span className="fine">{t.common.estimate} {money(lot.estimate_low, locale)} – {num(lot.estimate_high)}</span>
+          {estimateText(lot, n => money(n, locale), num) ? <span className="fine">{t.common.estimate} {estimateText(lot, n => money(n, locale), num)}</span> : null}
           {!lot.no_reserve && !isPure(lot) && st !== "sold" && st !== "unsold" ? (
             <span className="fine">{p == null ? t.common.reserveApplies : t.common.reserveNotMet}</span>
           ) : null}

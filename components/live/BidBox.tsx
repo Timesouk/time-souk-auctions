@@ -6,7 +6,7 @@ import { useLive } from "./LiveProvider";
 import { browserClient } from "@/lib/supabase/client";
 import { IS_PREVIEW } from "@/lib/env";
 import { getDict } from "@/lib/i18n/dict";
-import { bidLadder, isClosedStatus, minBid, nextMinBid } from "@/lib/auction";
+import { bidLadder, estimateText, isClosedStatus, minBid, nextMinBid } from "@/lib/auction";
 import { money, num, parseAmount, stamp } from "@/lib/format";
 import type { Locale, Lot, MyStatus } from "@/lib/types";
 
@@ -104,7 +104,9 @@ export function BidBox({ locale, lotId, me: meProp }: { locale: Locale; lotId: s
   const maxValue = parseAmount(maxText);
   const ownValue = parseAmount(ownText);
   const chosen = kind === "bid" ? (ownText.trim() ? ownValue : amount || step) : maxValue;
-  const big = chosen > lot.estimate_high * 1.5;
+  // Ask again before a bid far above the estimate, or (no estimate) far above the current price: catches an extra zero.
+  const high = lot.estimate_high || lot.estimate_low || 0;
+  const big = high ? chosen > high * 1.5 : chosen >= 10000 && chosen > Math.max(lot.current_bid || 0, lot.start_price) * 3;
 
   async function place() {
     if (!lot) return;
@@ -198,7 +200,7 @@ export function BidBox({ locale, lotId, me: meProp }: { locale: Locale; lotId: s
         </label>
       )}
       {confirming ? (
-        <p className="alert">{t.bid.confirmBig(money(chosen, locale), `${num(lot.estimate_low)}–${num(lot.estimate_high)}`)}</p>
+        <p className="alert">{high ? t.bid.confirmBig(money(chosen, locale), estimateText(lot, n => money(n, locale), num)) : t.bid.confirmJump(money(chosen, locale))}</p>
       ) : null}
       <button
         type="button"

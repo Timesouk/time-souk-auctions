@@ -16,13 +16,22 @@ export const INCREMENTS: [number, number][] = [
 
 export const bidIncrement = (p: number) => INCREMENTS.find(([limit]) => p < limit)![1];
 
-/** The lowest bid allowed: the starting price, then any amount above the current bid. */
+/** The lowest bid allowed: the starting price (from AED 1 when a lot starts at 0), then any amount above the current bid. */
 export const minBid = (lot: Pick<Lot, "current_bid" | "start_price">) =>
-  lot.current_bid == null ? lot.start_price : lot.current_bid + 1;
+  lot.current_bid == null ? Math.max(lot.start_price, 1) : lot.current_bid + 1;
 
 /** The suggested next bid (one bid step up). Used for the quick buttons; max bids also answer in these steps. */
 export const nextMinBid = (lot: Pick<Lot, "current_bid" | "start_price">) =>
-  lot.current_bid == null ? lot.start_price : lot.current_bid + bidIncrement(lot.current_bid);
+  lot.current_bid == null ? (lot.start_price > 0 ? lot.start_price : bidIncrement(0)) : lot.current_bid + bidIncrement(lot.current_bid);
+
+/** "AED 26,000 – 29,000", or "" when the lot has no estimate. */
+export function estimateText(lot: Pick<Lot, "estimate_low" | "estimate_high">, fmt: (n: number) => string, num: (n: number) => string) {
+  const lo = lot.estimate_low || null;
+  const hi = lot.estimate_high || null;
+  if (lo && hi && hi !== lo) return `${fmt(lo)} – ${num(hi)}`;
+  if (lo || hi) return fmt((lo || hi)!);
+  return "";
+}
 
 export function bidLadder(lot: Pick<Lot, "current_bid" | "start_price">, count = 6): number[] {
   const out: number[] = [];

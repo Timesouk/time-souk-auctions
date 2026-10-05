@@ -2,7 +2,7 @@
 // Staff actions. Every action checks the signed-in user is staff, then writes with the server key.
 import { revalidatePath } from "next/cache";
 import { adminClient } from "@/lib/supabase/admin";
-import { requireStaff } from "@/lib/staff";
+import { normStaffLogin, requireAdmin, requireStaff, staffEmail } from "@/lib/staff";
 import { createAndSendInvoice, markPaid, notifyInvoice } from "@/lib/invoices";
 import { normIg, dubaiInstant, toE164 } from "@/lib/format";
 import { emailHtml, emailReady, sendEmail } from "@/lib/notify/email";
@@ -109,14 +109,15 @@ export async function saveLot(input: LotInput) {
     row.has_box = !!p.has_box;
     row.has_papers = !!p.has_papers;
     row.no_reserve = !!p.no_reserve;
-    row.estimate_low = int(p.estimate_low);
-    row.estimate_high = int(p.estimate_high);
-    row.start_price = int(p.start_price);
+    // Estimates are optional (empty = not shown). One given on its own is used for both.
+    const lo = int(p.estimate_low);
+    const hi = int(p.estimate_high);
+    row.estimate_low = lo ?? hi;
+    row.estimate_high = hi ?? lo;
+    row.start_price = int(p.start_price) ?? 0;
     row.photos = Array.isArray(p.photos) ? (p.photos as string[]).filter(u => /^https:\/\//.test(u)).slice(0, 24) : [];
     if (!row.brand || !row.model) return bad("Brand and model are required.");
-    if (!row.estimate_low || !row.estimate_high) return bad("Add a low and a high estimate.");
-    if ((row.estimate_low as number) > (row.estimate_high as number)) return bad("The low estimate is higher than the high estimate.");
-    if (!row.start_price) return bad("Add a starting bid.");
+    if (lo && hi && lo > hi) return bad("The low estimate is higher than the high estimate.");
     const reserve = row.no_reserve ? null : int(input.priv.reserve);
     if (!row.no_reserve && !reserve) return bad("Set a reserve, or tick No reserve.");
 
@@ -187,9 +188,10 @@ export async function importLots(auctionId: string, lots: ImportedLot[]) {
     const rows = lots.map(l => ({
       ...l.pub,
       brand: str(l.pub.brand, 60), model: str(l.pub.model, 120),
-      estimate_low: Math.max(1, Math.round(l.pub.estimate_low || l.pub.start_price || 1)),
-      estimate_high: Math.max(1, Math.round(l.pub.estimate_high || l.pub.estimate_low || l.pub.start_price || 1)),
-      start_price: Math.max(1, Math.round(l.pub.start_price || 1)),
+      // Estimates are optional; a starting bid left empty is 0.
+      estimate_low: l.pub.estimate_low ? Math.round(l.pub.estimate_low) : null,
+      estimate_high: l.pub.estimate_high || l.pub.estimate_low ? Math.round(Math.max(l.pub.estimate_high || 0, l.pub.estimate_low || 0)) : null,
+      start_price: Math.max(0, Math.round(l.pub.start_price || 0)),
       auction_id: auctionId,
       lot_number: ++n
     }));
@@ -227,6 +229,19 @@ export async function relistLots(lotIds: string[], auctionId: string) {
     }
     revalidatePath(`/admin/auctions/${auctionId}`);
     return ok(`${src.length} lot${src.length === 1 ? "" : "s"} added to this auction. Check their reserves with the owners.`);
+  });
+}
+
+/** Every lot in this auction that has no bids yet starts at AED 0. */
+export async function zeroStartPrices(auctionId: string) {
+  return guard(async () => {
+    const { data, error } = await adminClient().from("lots")
+      .update({ start_price: 0, updated_at: new Date().toISOString() })
+      .eq("auction_id", auctionId).eq("bid_count", 0).gt("start_price", 0).select("id");
+    if (error) return bad(error.message);
+    revalidatePath(`/admin/auctions/${auctionId}`);
+    revalidatePath("/", "layout");
+    return ok(data?.length ? `${data.length} lot${data.length === 1 ? "" : "s"} now start at AED 0. Lots that already have bids keep their starting bid.` : "Every lot without bids already starts at AED 0.");
   });
 }
 
@@ -318,8 +333,9 @@ export async function updateBidder(profileId: string, patch: { instagram?: strin
     if (patch.instagram_confirmed !== undefined) row.instagram_confirmed = patch.instagram_confirmed;
     if (patch.suspended !== undefined) row.suspended = patch.suspended;
     if (patch.role !== undefined) {
-      if (me.role !== "admin") return bad("Only an admin can change roles.");
+      if (me.role !== "admin") return bad("Only the admin can change roles.");
       if (profileId === me.id) return bad("You can’t change your own role.");
+      if (patch.role === "admin") return bad("There is only one admin. Make them staff instead.");
       row.role = patch.role;
     }
     if (patch.phone !== undefined) {
@@ -421,10 +437,81 @@ export async function setConsignmentStatus(id: string, status: "new" | "contacte
   });
 }
 
+// ─── staff accounts (admin only) ───
+
+/** Creates a staff login: they sign in to the admin with this staff ID and password (no email or phone code). */
+export async function createStaffAccount(input: { name: string; login: string; password: string }) {
+  return guard(async () => {
+    await requireAdmin();
+    const name = str(input.name, 120);
+    const login = normStaffLogin(input.login);
+    const password = String(input.password || "");
+    if (name.length < 2) return bad("Add the staff member’s name.");
+    if (!login) return bad("Staff ID: 3 to 30 letters or numbers (dots, dashes and underscores are fine), no spaces.");
+    if (password.length < 8) return bad("The password needs at least 8 characters.");
+    const db = adminClient();
+    const { data: taken } = await db.from("profiles").select("id").eq("staff_login", login).maybeSingle();
+    if (taken) return bad(`The staff ID “${login}” is already taken.`);
+    const { data, error } = await db.auth.admin.createUser({
+      email: staffEmail(login, SITE_URL), password, email_confirm: true,
+      user_metadata: { full_name: name, lang: "en" }
+    });
+    if (error || !data.user) return bad(error?.message || "Couldn’t create the account.");
+    const { error: e2 } = await db.from("profiles")
+      .update({ role: "staff", staff_login: login, full_name: name, terms_accepted_at: new Date().toISOString() })
+      .eq("id", data.user.id);
+    if (e2) {
+      await db.auth.admin.deleteUser(data.user.id);
+      return bad(e2.message);
+    }
+    revalidatePath("/admin/staff");
+    return ok(`Login created for ${name}.`, data.user.id);
+  });
+}
+
+export async function setStaffPassword(profileId: string, password: string) {
+  return guard(async () => {
+    const me = await requireAdmin();
+    if (profileId === me.id) return bad("Change your own sign-in from your account, not here.");
+    if (String(password || "").length < 8) return bad("The password needs at least 8 characters.");
+    const db = adminClient();
+    const { data: p } = await db.from("profiles").select("staff_login").eq("id", profileId).maybeSingle();
+    if (!p?.staff_login) return bad("This person signs in with an email code, so they have no password to change.");
+    const { error } = await db.auth.admin.updateUserById(profileId, { password });
+    return error ? bad(error.message) : ok("New password saved. Their old password no longer works.");
+  });
+}
+
+/** Turns a staff login off (they can't sign in) or back on. */
+export async function setStaffActive(profileId: string, active: boolean) {
+  return guard(async () => {
+    const me = await requireAdmin();
+    if (profileId === me.id) return bad("You can’t turn off your own access.");
+    const db = adminClient();
+    const { error } = await db.from("profiles").update({ suspended: !active }).eq("id", profileId);
+    if (error) return bad(error.message);
+    await db.auth.admin.updateUserById(profileId, { ban_duration: active ? "none" : "876000h" });
+    revalidatePath("/admin/staff");
+    return ok(active ? "Access turned back on." : "Access turned off. They’re signed out and can’t sign in.");
+  });
+}
+
+/** Removes the staff (or a second admin's) role from someone who signs in with an email code; they stay a bidder. */
+export async function setStaffRole(profileId: string, role: "staff" | "bidder") {
+  return guard(async () => {
+    const me = await requireAdmin();
+    if (profileId === me.id) return bad("You can’t change your own role.");
+    const { error } = await adminClient().from("profiles").update({ role }).eq("id", profileId);
+    revalidatePath("/admin/staff");
+    return error ? bad(error.message) : ok(role === "staff" ? "Now staff (not admin)." : "Staff access removed. They can still bid as a normal bidder.");
+  });
+}
+
 // ─── settings ───
 
 export async function saveSettings(input: { seller_fee: number; pay_days: number; timer_seconds: number; lot_target: number; cod_fee: number; whatsapp: string; instagram: string; contact_email: string; bank_details: string }) {
   return guard(async () => {
+    await requireAdmin();
     const db = adminClient();
     const fee = Number(input.seller_fee);
     if (!(fee >= 0 && fee <= 50)) return bad("Seller fee should be between 0 and 50%.");
@@ -448,6 +535,7 @@ export async function saveSettings(input: { seller_fee: number; pay_days: number
 
 export async function registerWebhooks() {
   return guard(async () => {
+    await requireAdmin();
     const out: string[] = [];
     if (ziinaReady() && process.env.ZIINA_WEBHOOK_SECRET) {
       const r = await ziinaRegisterWebhook(`${SITE_URL}/api/webhooks/ziina`);
@@ -464,7 +552,7 @@ export async function registerWebhooks() {
 
 export async function sendTestEmail() {
   return guard(async () => {
-    const me = await requireStaff();
+    const me = await requireAdmin();
     if (!emailReady()) return bad("Add RESEND_API_KEY and EMAIL_FROM first.");
     const r = await sendEmail({ to: me.email, subject: "Test from The Time Souk", text: "Email is working.", html: emailHtml({ lang: "en", heading: "Email is working", blocks: ["This is a test from your auction admin."], footer: "The Time Souk admin" }) });
     return r.ok ? ok(`Test email sent to ${me.email}.`) : bad(r.error || "Failed");

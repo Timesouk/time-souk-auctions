@@ -50,11 +50,10 @@ export function BidderRow({ b, canRole }: { b: BidderRowData; canRole: boolean }
                 <button className="btn sm" type="button" disabled={pending} onClick={() => run(() => updateBidder(b.id, { notes }))}>Save notes</button>
                 <button className="btn sm" type="button" disabled={pending} onClick={() => run(() => updateBidder(b.id, { id_checked: !b.id_checked }))}>{b.id_checked ? "Unmark ID checked" : "Mark ID checked"}</button>
                 <button className={`btn sm${b.suspended ? "" : " danger"}`} type="button" disabled={pending} onClick={() => run(() => updateBidder(b.id, { suspended: !b.suspended }))}>{b.suspended ? "Unsuspend" : "Suspend"}</button>
-                {canRole ? (
-                  <select value={b.role} onChange={e => run(() => updateBidder(b.id, { role: e.target.value as "bidder" | "staff" | "admin" }))} aria-label="Role">
+                {canRole && b.role !== "admin" ? (
+                  <select value={b.role} onChange={e => run(() => updateBidder(b.id, { role: e.target.value as "bidder" | "staff" }))} aria-label="Role">
                     <option value="bidder">Bidder</option>
-                    <option value="staff">Staff</option>
-                    <option value="admin">Admin</option>
+                    <option value="staff">Staff (signs in with email code)</option>
                   </select>
                 ) : null}
               </div>

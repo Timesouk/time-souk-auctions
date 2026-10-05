@@ -6,7 +6,7 @@ import { BidHistory } from "./BidHistory";
 import { BigCountdown, PureTag, StatusPill, TimerBox, whoLabel } from "./parts";
 import { WatchArt } from "../WatchArt";
 import { getDict, timerWords } from "@/lib/i18n/dict";
-import { isClosedStatus, lotPath, upNext } from "@/lib/auction";
+import { estimateText, isClosedStatus, lotPath, upNext } from "@/lib/auction";
 import { dateLong, money, num, pad2, timeOf } from "@/lib/format";
 import type { BidRow, Locale, MyStatus } from "@/lib/types";
 
@@ -46,7 +46,7 @@ export function LivePanel({ locale, me, instagram, history = [] }: { locale: Loc
           <div>
             <span className="k">{priceLabel}{p != null ? ` · ${whoLabel(locale, lot.leader_paddle, lot.leader_via)}` : ""}</span>
             <div className="bigp num">{money(p ?? lot.start_price, locale)}</div>
-            <span className="fine">{t.common.estimate} {money(lot.estimate_low, locale)} – {num(lot.estimate_high)}</span>
+            {estimateText(lot, n => money(n, locale), num) ? <span className="fine">{t.common.estimate} {estimateText(lot, n => money(n, locale), num)}</span> : null}
           </div>
           <TimerBox locale={locale} lot={lot} status={st} />
           {!isClosedStatus(st) ? <BidBox locale={locale} lotId={lot.id} me={me} /> : null}
