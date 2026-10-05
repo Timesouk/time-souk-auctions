@@ -41,7 +41,7 @@ docs/SETUP.md          deployment and run-of-show guide
 
 ## Run it on a computer
 
-Requires Node 20 or newer.
+Requires Node 22.
 
 ```bash
 npm install
