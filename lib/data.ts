@@ -12,7 +12,7 @@ const AUCTION_FIELDS = "id,number,sale_date,prebid_opens_at,live_starts_at,statu
 export const getSettings = cache(async (): Promise<Settings> => {
   const sb = await serverClient();
   if (!sb) return SAMPLE_SETTINGS;
-  const { data } = await sb.from("settings").select("seller_fee,pay_days,timer_seconds,lot_target,whatsapp,instagram,contact_email").eq("id", 1).single();
+  const { data } = await sb.from("settings").select("*").eq("id", 1).single();
   return data ? { ...data, seller_fee: Number(data.seller_fee) } : SAMPLE_SETTINGS;
 });
 

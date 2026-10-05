@@ -34,7 +34,7 @@ public/brand/          the logo (site, emails); app/icon.png and the link-previe
 app/api/               phone codes, payments, provider webhooks, cron, uploads, CSV export
 components/            site, live bidding and admin components
 lib/                   formatting, auction rules, i18n (EN/AR), Supabase clients, invoices, notifications, payment providers
-supabase/migrations/   the database: tables, security rules and bidding engine (run 0001, then 0002)
+supabase/migrations/   the database: tables, security rules and bidding engine (run 0001, then 0002, then 0003)
 supabase/tests/        bidding-engine tests on an in-memory Postgres
 docs/SETUP.md          deployment and run-of-show guide
 ```
@@ -54,7 +54,7 @@ With no Supabase settings the site runs in **preview mode** with 24 sample watch
 
 ```bash
 npm run typecheck    # TypeScript
-npm run test:db      # 31 bidding-engine tests: increments, maximum bids, ties, reserve, sudden death, timers, invoices, privacy rules
+npm run test:db      # 34 bidding-engine tests: any-amount bids, maximum bids, ties, reserve, sudden death, timers, invoices, cash on delivery, addresses, privacy rules
 npm run build        # production build
 ```
 

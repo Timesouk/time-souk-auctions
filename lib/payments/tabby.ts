@@ -12,6 +12,8 @@ export async function tabbyCreate(opts: {
   title: string;
   sku: string;
   buyer: TabbyBuyer;
+  /** Delivery address, if the buyer gave one. Empty means they'll collect from us. */
+  ship?: { address: string; city: string };
   lang: "en" | "ar";
   urls: { success: string; cancel: string; failure: string };
 }) {
@@ -25,7 +27,9 @@ export async function tabbyCreate(opts: {
         currency: "AED",
         description: opts.title,
         buyer: { name: opts.buyer.name, email: opts.buyer.email, phone: opts.buyer.phone },
-        shipping_address: { city: "Dubai", address: "Collection from The Time Souk, Dubai", zip: "00000" },
+        shipping_address: opts.ship?.address
+          ? { city: (opts.ship.city || "Dubai").slice(0, 80), address: opts.ship.address.slice(0, 250), zip: "00000" }
+          : { city: "Dubai", address: "Collection from The Time Souk, Dubai", zip: "00000" },
         order: {
           reference_id: opts.reference,
           updated_at: new Date().toISOString(),

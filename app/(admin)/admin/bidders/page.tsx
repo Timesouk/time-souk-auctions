@@ -11,7 +11,7 @@ export default async function BiddersPage({ searchParams }: { searchParams: Prom
   const qv = String(sp.q || "").trim();
   const me = await getStaff();
   const db = adminClient();
-  let query = db.from("profiles").select("id, paddle, full_name, email, phone, phone_verified_at, country, instagram, instagram_confirmed, role, suspended, terms_accepted_at, created_at").order("paddle", { ascending: false }).limit(300);
+  let query = db.from("profiles").select("id, paddle, full_name, email, phone, phone_verified_at, country, address, city, instagram, instagram_confirmed, role, suspended, terms_accepted_at, created_at").order("paddle", { ascending: false }).limit(300);
   if (qv) {
     const safe = qv.replace(/[,()%]/g, "");
     query = /^\d+$/.test(safe)
@@ -31,7 +31,7 @@ export default async function BiddersPage({ searchParams }: { searchParams: Prom
   const emailOk = new Set((users?.users || []).filter(u => u.email_confirmed_at).map(u => u.id));
   const rows: BidderRowData[] = (profiles || []).map(p => ({
     id: p.id, paddle: p.paddle, full_name: p.full_name, email: p.email, phone: p.phone, phone_verified: !!p.phone_verified_at, email_verified: emailOk.has(p.id),
-    country: p.country, instagram: p.instagram, instagram_confirmed: p.instagram_confirmed, role: p.role, suspended: p.suspended, terms: !!p.terms_accepted_at,
+    country: p.country, address: [p.address, p.city].filter(Boolean).join(", "), instagram: p.instagram, instagram_confirmed: p.instagram_confirmed, role: p.role, suspended: p.suspended, terms: !!p.terms_accepted_at,
     created_at: p.created_at, notes: nb.get(p.id)?.notes || "", id_checked: !!nb.get(p.id)?.id_checked,
     wins: (invs || []).filter(i => i.bidder_id === p.id).length, unpaid: (invs || []).filter(i => i.bidder_id === p.id && i.status !== "paid").length
   }));

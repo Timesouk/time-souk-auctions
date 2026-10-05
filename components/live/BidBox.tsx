@@ -6,8 +6,8 @@ import { useLive } from "./LiveProvider";
 import { browserClient } from "@/lib/supabase/client";
 import { IS_PREVIEW } from "@/lib/env";
 import { getDict } from "@/lib/i18n/dict";
-import { bidLadder, isClosedStatus, nextMinBid } from "@/lib/auction";
-import { money, num, stamp } from "@/lib/format";
+import { bidLadder, isClosedStatus, minBid, nextMinBid } from "@/lib/auction";
+import { money, num, parseAmount, stamp } from "@/lib/format";
 import type { Locale, Lot, MyStatus } from "@/lib/types";
 
 type Msg = { kind: "ok" | "err" | "info"; text: string } | null;
@@ -25,6 +25,7 @@ export function BidBox({ locale, lotId, me: meProp }: { locale: Locale; lotId: s
   const path = usePathname();
   const [kind, setKind] = useState<"bid" | "max">("bid");
   const [amount, setAmount] = useState<number | null>(null);
+  const [ownText, setOwnText] = useState("");
   const [maxText, setMaxText] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<Msg>(null);
@@ -33,7 +34,9 @@ export function BidBox({ locale, lotId, me: meProp }: { locale: Locale; lotId: s
   const [hasBid, setHasBid] = useState(false);
 
   const ladder = useMemo(() => (lot ? bidLadder(lot, 3) : []), [lot]);
-  const min = lot ? nextMinBid(lot) : 0;
+  // The lowest bid the system accepts (any amount above the current bid) and the usual next step.
+  const min = lot ? minBid(lot) : 0;
+  const step = lot ? nextMinBid(lot) : 0;
 
   // Keep the chosen amount valid as the price moves.
   useEffect(() => {
@@ -98,8 +101,9 @@ export function BidBox({ locale, lotId, me: meProp }: { locale: Locale; lotId: s
   }
 
   const leading = lot.leader_paddle != null && lot.leader_paddle === me.paddle;
-  const maxValue = Math.round(Number(maxText.replace(/[^\d]/g, "")) || 0);
-  const chosen = kind === "bid" ? amount || min : maxValue;
+  const maxValue = parseAmount(maxText);
+  const ownValue = parseAmount(ownText);
+  const chosen = kind === "bid" ? (ownText.trim() ? ownValue : amount || step) : maxValue;
   const big = chosen > lot.estimate_high * 1.5;
 
   async function place() {
@@ -109,8 +113,8 @@ export function BidBox({ locale, lotId, me: meProp }: { locale: Locale; lotId: s
       setMsg({ kind: "info", text: t.preview });
       return;
     }
-    if (kind === "max" && maxValue < (leading ? (lot.current_bid || 0) + 1 : min)) {
-      setMsg({ kind: "err", text: t.bid.errors.bid_too_low(leading ? (lot.current_bid || 0) + 1 : min) });
+    if (chosen < min) {
+      setMsg({ kind: "err", text: t.bid.errors.bid_too_low(min) });
       return;
     }
     if (big && !confirming) {
@@ -140,6 +144,7 @@ export function BidBox({ locale, lotId, me: meProp }: { locale: Locale; lotId: s
       setMaxText("");
       setMsg(r.leading ? { kind: "ok", text: t.bid.maxSet(money(chosen, locale)) } : { kind: "err", text: t.bid.outbidNow(money(r.price, locale)) });
     } else {
+      setOwnText("");
       setMsg(r.leading ? { kind: "ok", text: t.bid.placed(money(chosen, locale)) } : { kind: "err", text: t.bid.outbidNow(money(r.price, locale)) });
     }
   }
@@ -160,20 +165,33 @@ export function BidBox({ locale, lotId, me: meProp }: { locale: Locale; lotId: s
         <button type="button" aria-pressed={kind === "max"} onClick={() => { setKind("max"); setConfirming(false); }}>{t.bid.kindMax}</button>
       </div>
       {kind === "bid" ? (
-        <div className="quick">
-          {ladder.map(a => (
-            <button key={a} type="button" aria-pressed={a === amount} onClick={() => { setAmount(a); setConfirming(false); }}>
-              {num(a)}
-            </button>
-          ))}
-        </div>
+        <>
+          <div className="quick">
+            {ladder.map(a => (
+              <button key={a} type="button" aria-pressed={!ownText.trim() && a === amount} onClick={() => { setAmount(a); setOwnText(""); setConfirming(false); setMsg(null); }}>
+                {num(a)}
+              </button>
+            ))}
+          </div>
+          <label className="field">
+            {t.bid.ownAmount}
+            <input
+              inputMode="numeric"
+              className="input num"
+              placeholder={num(step)}
+              value={ownText}
+              onChange={e => { setOwnText(e.target.value); setConfirming(false); setMsg(null); }}
+            />
+          </label>
+          <p className="fine">{t.bid.anyAmount(money(min, locale))}</p>
+        </>
       ) : (
         <label className="field">
           {t.bid.yourBid} (AED)
           <input
             inputMode="numeric"
             className="input num"
-            placeholder={num(leading ? (lot.current_bid || 0) + 1000 : min)}
+            placeholder={num(leading ? (lot.current_bid || 0) + 1000 : step)}
             value={maxText}
             onChange={e => { setMaxText(e.target.value); setConfirming(false); }}
           />
@@ -185,10 +203,10 @@ export function BidBox({ locale, lotId, me: meProp }: { locale: Locale; lotId: s
       <button
         type="button"
         className={`btn lg wide ${confirming ? "strong" : "pri"}`}
-        disabled={busy || (kind === "bid" ? leading : !maxValue)}
+        disabled={busy || (kind === "bid" ? leading || !chosen : !maxValue)}
         onClick={place}
       >
-        {kind === "bid" ? t.bid.place(money(chosen, locale)) : t.bid.placeMax(money(chosen || min, locale))}
+        {kind === "bid" ? t.bid.place(money(chosen, locale)) : t.bid.placeMax(money(chosen || step, locale))}
       </button>
       {msg ? <p className={`alert ${msg.kind === "ok" ? "ok" : msg.kind === "info" ? "info" : ""}`} role="status">{msg.text}</p> : null}
       <p className="fine">{t.bid.noPremium}{status === "open" ? ` ${t.bid.preBidNote(stamp(auction.live_starts_at, locale))}` : ""}</p>

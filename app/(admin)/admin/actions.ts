@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { adminClient } from "@/lib/supabase/admin";
 import { requireStaff } from "@/lib/staff";
-import { markPaid, notifyInvoice } from "@/lib/invoices";
+import { createAndSendInvoice, markPaid, notifyInvoice } from "@/lib/invoices";
 import { normIg, dubaiInstant, toE164 } from "@/lib/format";
 import { emailHtml, emailReady, sendEmail } from "@/lib/notify/email";
 import { ziinaReady, ziinaRegisterWebhook } from "@/lib/payments/ziina";
@@ -245,15 +245,18 @@ export async function consoleData(auctionId: string) {
   const db = adminClient();
   const { data: lots } = await db.from("lots").select("id").eq("auction_id", auctionId);
   const ids = (lots || []).map(l => l.id);
-  const [{ data: privs }, { data: maxes }, { data: bidders }] = await Promise.all([
+  const [{ data: privs }, { data: maxes }, { data: bidders }, { data: invoices }] = await Promise.all([
     ids.length ? db.from("lot_private").select("lot_id, reserve, source, consignor_name, leader_ig").in("lot_id", ids) : Promise.resolve({ data: [] }),
     ids.length ? db.from("max_bids").select("lot_id, amount, set_at, profiles(paddle, full_name)").in("lot_id", ids) : Promise.resolve({ data: [] }),
-    db.from("profiles").select("paddle, full_name, instagram, instagram_confirmed, phone_verified_at, suspended").order("paddle").limit(5000)
+    db.from("profiles").select("paddle, full_name, instagram, instagram_confirmed, phone_verified_at, suspended").order("paddle").limit(5000),
+    db.from("invoices").select("id, lot_id, number, status, amount, bidder_id, ig_handle, notified_at, notify_error").eq("auction_id", auctionId).neq("status", "void")
   ]);
   return {
     privs: (privs || []) as { lot_id: string; reserve: number | null; source: string; consignor_name: string; leader_ig: string | null }[],
     maxes: ((maxes || []) as unknown as { lot_id: string; amount: number; profiles: { paddle: number; full_name: string } | null }[]).map(m => ({ lot_id: m.lot_id, amount: m.amount, paddle: m.profiles?.paddle ?? null, name: m.profiles?.full_name || "" })),
-    bidders: (bidders || []).map(b => ({ paddle: b.paddle as number, name: b.full_name as string, ig: b.instagram_confirmed ? (b.instagram as string | null) : null, verified: !!b.phone_verified_at, suspended: !!b.suspended }))
+    bidders: (bidders || []).map(b => ({ paddle: b.paddle as number, name: b.full_name as string, ig: b.instagram_confirmed ? (b.instagram as string | null) : null, verified: !!b.phone_verified_at, suspended: !!b.suspended })),
+    // Invoices already created for this auction (staff send each one from the console).
+    invoices: (invoices || []) as { id: string; lot_id: string; number: string; status: string; amount: number; bidder_id: string | null; ig_handle: string | null; notified_at: string | null; notify_error: string | null }[]
   };
 }
 
@@ -307,7 +310,23 @@ export async function updateBidder(profileId: string, patch: { instagram?: strin
 
 // ─── payments ───
 
-export async function markInvoicePaid(invoiceId: string, method: "bank" | "cash" | "card" | "tabby" | "tamara") {
+/** "Send invoice" in Winners & payments, for a sold lot whose invoice hasn't gone out yet. */
+export async function sendLotInvoice(lotId: string) {
+  return guard(async () => {
+    await requireStaff();
+    const r = await createAndSendInvoice(lotId);
+    revalidatePath("/admin/payments");
+    if (!r.ok) return bad(r.error || "Couldn’t send the invoice.");
+    if (!r.invoice) return bad("No invoice: the lot didn’t sell, or its timer hasn’t ended.");
+    if (!r.registered) return ok(`Invoice ${r.number} created for @${r.ig}. Link them to a paddle below to send the payment link.`);
+    if (r.alreadySent) return ok(`Invoice ${r.number} was already sent.`);
+    return r.sent?.sent
+      ? ok(`Invoice ${r.number} sent.${r.sent.errors.length ? " " + r.sent.errors.join(" · ") : ""}`)
+      : bad(`Invoice ${r.number} created but not sent: ${(r.sent?.errors || []).join(" · ") || "unknown error"}.`);
+  });
+}
+
+export async function markInvoicePaid(invoiceId: string, method: "bank" | "cash" | "card" | "tabby" | "tamara" | "cod") {
   return guard(async () => {
     const me = await requireStaff();
     const done = await markPaid(invoiceId, method, me.id);
@@ -366,7 +385,7 @@ export async function setConsignmentStatus(id: string, status: "new" | "contacte
 
 // ─── settings ───
 
-export async function saveSettings(input: { seller_fee: number; pay_days: number; timer_seconds: number; lot_target: number; whatsapp: string; instagram: string; contact_email: string; bank_details: string }) {
+export async function saveSettings(input: { seller_fee: number; pay_days: number; timer_seconds: number; lot_target: number; cod_fee: number; whatsapp: string; instagram: string; contact_email: string; bank_details: string }) {
   return guard(async () => {
     const db = adminClient();
     const fee = Number(input.seller_fee);
@@ -376,6 +395,7 @@ export async function saveSettings(input: { seller_fee: number; pay_days: number
       pay_days: Math.min(30, Math.max(1, Math.round(input.pay_days))),
       timer_seconds: Math.min(3600, Math.max(10, Math.round(input.timer_seconds))),
       lot_target: Math.max(1, Math.round(input.lot_target)),
+      cod_fee: Math.min(1000, Math.max(0, Math.round(Number(input.cod_fee) || 0))),
       whatsapp: toE164(input.whatsapp) || "",
       instagram: str(input.instagram, 60).replace(/^@+/, ""),
       contact_email: str(input.contact_email, 160),

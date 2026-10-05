@@ -4,7 +4,7 @@ import { Msg, useAction } from "./ui";
 import { TimerPicker } from "./TimerPicker";
 import { registerWebhooks, saveSettings, sendTestEmail, setConsignmentStatus } from "@/app/(admin)/admin/actions";
 
-type S = { seller_fee: number; pay_days: number; timer_seconds: number; lot_target: number; whatsapp: string; instagram: string; contact_email: string; bank_details: string };
+type S = { seller_fee: number; pay_days: number; timer_seconds: number; lot_target: number; cod_fee: number; whatsapp: string; instagram: string; contact_email: string; bank_details: string };
 
 export function SettingsForm({ initial }: { initial: S }) {
   const [s, setS] = useState(initial);
@@ -20,6 +20,7 @@ export function SettingsForm({ initial }: { initial: S }) {
           <span className="fine">Each auction can use its own timer (Auctions → the auction).</span>
         </div>
         <label className="field">Weekly lot target<input inputMode="numeric" {...n("lot_target")} /></label>
+        <label className="field">Cash on delivery charge (AED)<input inputMode="numeric" {...n("cod_fee")} /><span className="fine">Added to the bill when a buyer chooses cash on delivery.</span></label>
         <label className="field">WhatsApp number (shown to bidders)<input type="tel" placeholder="+971 5X XXX XXXX" {...n("whatsapp")} /></label>
         <label className="field">Instagram handle<input placeholder="thetimesouk" {...n("instagram")} /></label>
         <label className="field">Contact email<input type="email" {...n("contact_email")} /></label>

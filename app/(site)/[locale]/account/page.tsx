@@ -42,7 +42,7 @@ export default async function AccountPage({ params, searchParams }: P) {
   const [{ data: bids }, { data: maxes }, { data: invoices }] = await Promise.all([
     sb.from("bids").select("amount, lot_id, lots(id,lot_number,brand,model,current_bid,leader_paddle,ends_at,no_reserve,reserve_met,made_pure,auctions!lots_auction_id_fkey(number))").order("id", { ascending: false }).limit(300),
     sb.from("max_bids").select("lot_id, amount"),
-    sb.from("invoices").select("id, number, amount, due_date, status, pay_token, lots(lot_number, brand, model)").neq("status", "void").order("created_at", { ascending: false })
+    sb.from("invoices").select("id, number, amount, cod_fee, cod_requested_at, due_date, status, pay_token, lots(lot_number, brand, model)").neq("status", "void").order("created_at", { ascending: false })
   ]);
   const maxBy = new Map((maxes || []).map(m => [m.lot_id as string, m.amount as number]));
   const seen = new Map<string, { lot: BidLot; mine: number }>();
@@ -98,10 +98,10 @@ export default async function AccountPage({ params, searchParams }: P) {
             <div className="tbl-wrap">
               <table>
                 <tbody>
-                  {(invoices as unknown as { id: string; number: string; amount: number; due_date: string; status: string; pay_token: string; lots: { lot_number: number; brand: string; model: string } | null }[]).map(inv => (
+                  {(invoices as unknown as { id: string; number: string; amount: number; cod_fee: number | null; cod_requested_at: string | null; due_date: string; status: string; pay_token: string; lots: { lot_number: number; brand: string; model: string } | null }[]).map(inv => (
                     <tr key={inv.id}>
                       <td><span className="mono">{inv.number}</span><br />{inv.lots ? `${inv.lots.brand} ${inv.lots.model}` : ""}</td>
-                      <td className="n">{money(inv.amount, locale)}<br /><span className="fine">{inv.status === "paid" ? t.account.paid : t.account.due(dateShort(inv.due_date, locale))}</span></td>
+                      <td className="n">{money(inv.amount + (inv.cod_requested_at ? inv.cod_fee || 0 : 0), locale)}<br /><span className="fine">{inv.status === "paid" ? t.account.paid : inv.cod_requested_at ? t.pay.cod : t.account.due(dateShort(inv.due_date, locale))}</span></td>
                       <td>{inv.status === "paid" ? <span className="pill ok">{t.account.paid}</span> : <Link className="btn sm pri" href={`/${locale}/pay/${inv.pay_token}`}>{t.account.payNow}</Link>}</td>
                     </tr>
                   ))}

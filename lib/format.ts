@@ -4,6 +4,16 @@ export const TZ = "Asia/Dubai";
 
 export const num = (n: number | null | undefined) => Math.round(Number(n) || 0).toLocaleString("en-US");
 
+/** A typed amount in whole dirhams: "21,500", "21500.00", "AED 21 500" or Arabic digits "٢١٥٠٠". 0 if none. */
+export function parseAmount(text: string) {
+  const western = String(text || "")
+    .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+    .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06f0))
+    .replace(/[٫]/g, ".");
+  const whole = western.replace(/[^\d.]/g, "").split(".")[0];
+  return Math.min(50000000, Number(whole) || 0);
+}
+
 export function money(n: number | null | undefined, locale: Locale = "en") {
   return locale === "ar" ? `${num(n)} درهم` : `AED ${num(n)}`;
 }

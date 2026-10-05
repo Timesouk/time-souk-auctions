@@ -16,6 +16,11 @@ export const INCREMENTS: [number, number][] = [
 
 export const bidIncrement = (p: number) => INCREMENTS.find(([limit]) => p < limit)![1];
 
+/** The lowest bid allowed: the starting price, then any amount above the current bid. */
+export const minBid = (lot: Pick<Lot, "current_bid" | "start_price">) =>
+  lot.current_bid == null ? lot.start_price : lot.current_bid + 1;
+
+/** The suggested next bid (one bid step up). Used for the quick buttons; max bids also answer in these steps. */
 export const nextMinBid = (lot: Pick<Lot, "current_bid" | "start_price">) =>
   lot.current_bid == null ? lot.start_price : lot.current_bid + bidIncrement(lot.current_bid);
 

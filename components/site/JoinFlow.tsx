@@ -29,6 +29,8 @@ export function JoinFlow({ locale, mode, next, payDays, channels }: {
   const [name, setName] = useState("");
   const [country, setCountry] = useState(COUNTRY_VALUES[0]);
   const [ig, setIg] = useState("");
+  const [address, setAddress] = useState("");
+  const [city, setCity] = useState("");
   const [agree, setAgree] = useState(false);
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
@@ -42,6 +44,8 @@ export function JoinFlow({ locale, mode, next, payDays, channels }: {
       setName(s.full_name || "");
       if (s.country) setCountry(s.country);
       setIg(s.instagram ? `@${s.instagram}` : "");
+      setAddress(s.address || "");
+      setCity(s.city || "");
       return setStep("details");
     }
     if (!s.phone_verified) return setStep("phone");
@@ -98,7 +102,10 @@ export function JoinFlow({ locale, mode, next, payDays, channels }: {
     if (name.trim().length < 2) return setErr(a.nameRequired);
     if (!agree) return setErr(a.termsRequired);
     setBusy(true);
-    const { data, error } = await sb!.rpc("complete_profile", { p_full_name: name, p_country: country, p_instagram: ig, p_lang: locale, p_accept_terms: true });
+    const { data, error } = await sb!.rpc("complete_profile", {
+      p_full_name: name, p_country: country, p_instagram: ig, p_lang: locale, p_accept_terms: true,
+      p_address: address.trim(), p_city: city.trim()
+    });
     setBusy(false);
     if (error) return setErr(error.message.startsWith("instagram_taken") ? a.igTaken : error.message);
     route(data as MyStatus);
@@ -185,6 +192,11 @@ export function JoinFlow({ locale, mode, next, payDays, channels }: {
           </label>
           <label className="field">{a.instagram}<input value={ig} onChange={e => setIg(e.target.value)} placeholder="@yourname" dir="ltr" /></label>
           <p className="fine">{a.instagramNote}</p>
+          <label className="field">{a.address}
+            <textarea rows={2} maxLength={500} autoComplete="street-address" placeholder={a.addressPh} value={address} onChange={e => setAddress(e.target.value)} />
+          </label>
+          <label className="field">{a.city}<input maxLength={80} autoComplete="address-level2" value={city} onChange={e => setCity(e.target.value)} /></label>
+          <p className="fine">{a.addressNote}</p>
           <label className="check">
             <input type="checkbox" checked={agree} onChange={e => setAgree(e.target.checked)} />
             <span>{a.agree(payDays)} <Link href={`/${locale}/terms`} target="_blank">{a.readTerms}</Link></span>

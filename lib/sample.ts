@@ -9,7 +9,8 @@ export const SAMPLE_SETTINGS: Settings = {
   lot_target: 100,
   whatsapp: "",
   instagram: "",
-  contact_email: ""
+  contact_email: "",
+  cod_fee: 10
 };
 
 type Row = [string, string, string, string, string, string, string, string, string, string, string, string, boolean, boolean, string, number, number, number, boolean, string, number[]];
@@ -58,7 +59,7 @@ export function sampleAuction(now = Date.now()): { auction: Auction; lots: Lot[]
     timer_seconds: null
   };
   // DEMO_LIVE=1: lot 4 live with its timer running. DEMO_LIVE=block: lot 4 on the block, waiting for Start.
-  const demoLive = process.env.DEMO_LIVE === "1" || process.env.DEMO_LIVE === "block";
+  const demoLive = process.env.DEMO_LIVE === "1" || process.env.DEMO_LIVE === "block" || process.env.DEMO_LIVE === "sold";
   const lots: Lot[] = ROWS.map((r, i) => {
     const no = i + 1;
     const bids = r[20];
@@ -88,7 +89,11 @@ export function sampleAuction(now = Date.now()): { auction: Auction; lots: Lot[]
       lots[i].ends_at = new Date(now - (600 - i * 180) * 1000).toISOString();
     });
     lots[1].current_bid = 9000;
-    lots[3].ends_at = process.env.DEMO_LIVE === "block" ? null : new Date(now + Math.max(5, 140 - cycle) * 1000).toISOString();
+    lots[3].ends_at =
+      process.env.DEMO_LIVE === "block" ? null :
+      process.env.DEMO_LIVE === "sold" ? new Date(now - 8000).toISOString() :
+      new Date(now + Math.max(5, 140 - cycle) * 1000).toISOString();
+    if (process.env.DEMO_LIVE === "sold") lots[3].made_pure = true;
     lots[3].leader_paddle = null;
     lots[3].leader_via = "instagram";
     auction.block_lot_id = lots[3].id;

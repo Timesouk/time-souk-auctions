@@ -8,8 +8,8 @@ import { ConfirmButton } from "./ui";
 import { TimerPicker } from "./TimerPicker";
 import { browserClient } from "@/lib/supabase/client";
 import { consoleData, lotBidsDetailed, setAuctionTimer } from "@/app/(admin)/admin/actions";
-import { bidLadder, isClosedStatus, isPure, nextMinBid, timerLabel, upNext } from "@/lib/auction";
-import { money, normIg, num, pad2, timeOf } from "@/lib/format";
+import { bidLadder, isClosedStatus, isPure, minBid, nextMinBid, timerLabel, upNext } from "@/lib/auction";
+import { money, normIg, num, pad2, parseAmount, timeOf } from "@/lib/format";
 import { IS_PREVIEW } from "@/lib/env";
 import type { Lot } from "@/lib/types";
 
@@ -58,7 +58,7 @@ export function LiveConsole() {
   const [via, setVia] = useState("instagram");
   const [kind, setKind] = useState<"bid" | "max">("bid");
   const whoRef = useRef<HTMLInputElement>(null);
-  const finalized = useRef(new Set<string>());
+  const [sending, setSending] = useState<string | null>(null);
 
   const sel = (selId && byId.get(selId)) || blockLot || lots.find(l => !isClosedStatus(statusOf(l))) || lots[0] || null;
 
@@ -82,28 +82,22 @@ export function LiveConsole() {
     lotBidsDetailed(sel.id).then(setFeed).catch(() => setFeed([]));
   }, [sel?.id, sel?.bid_count]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Keep the amount at the next valid bid as the price moves.
+  // Suggest the usual next step as the price moves (staff can type any amount above the current bid).
   useEffect(() => {
     if (sel) setAmount(String(nextMinBid(sel)));
   }, [sel?.id, sel?.current_bid]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // When a lot's timer ends, create the winner's invoice and send the payment link straight away.
-  const blockStatus = blockLot ? statusOf(blockLot) : null;
-  useEffect(() => {
-    if (IS_PREVIEW || !blockLot || blockStatus !== "sold" || finalized.current.has(blockLot.id)) return;
-    finalized.current.add(blockLot.id);
-    fetch(`/api/lots/${blockLot.id}/finalize`, { method: "POST" })
-      .then(r => r.json())
-      .then(j => {
-        if (j.invoice) setNote({ ok: true, text: `Lot ${pad2(blockLot.lot_number)} sold. Invoice created${j.sent?.sent ? " and the payment link sent" : ""}.` });
-      })
-      .catch(() => null);
-  }, [blockLot, blockStatus]);
 
   const bidders = useMemo(() => new Map((data?.bidders || []).map(b => [b.paddle, b])), [data]);
   const igMap = useMemo(() => new Map((data?.bidders || []).filter(b => b.ig).map(b => [b.ig!, b])), [data]);
   const priv = useMemo(() => new Map((data?.privs || []).map(p => [p.lot_id, p])), [data]);
   const maxes = (lotId: string) => (data?.maxes || []).filter(m => m.lot_id === lotId).sort((a, b) => b.amount - a.amount);
+  const invoices = useMemo(() => new Map((data?.invoices || []).map(i => [i.lot_id, i])), [data]);
+  // Sold lots whose invoice hasn't gone out yet (staff send each one when they're sure of the winner).
+  // (Instagram winners who aren't registered yet are handled in Winners & payments.)
+  const unsent = lots.filter(l => {
+    const inv = invoices.get(l.id);
+    return statusOf(l) === "sold" && !inv?.notified_at && !(inv && !inv.bidder_id);
+  });
 
   function leaderText(l: Lot) {
     if (l.current_bid == null) return "No bids";
@@ -136,12 +130,74 @@ export function LiveConsole() {
     setBusy(false);
     if (error) return setNote({ ok: false, text: explain(error.message) });
     await refresh();
-    if (action === "hammer" && !finalized.current.has(lot.id)) {
-      finalized.current.add(lot.id);
-      fetch(`/api/lots/${lot.id}/finalize`, { method: "POST" }).catch(() => null);
-    }
-    if (action === "reopen") finalized.current.delete(lot.id);
+    if (action === "reopen" || action === "hammer") loadData();
     if (done) setNote({ ok: true, text: done });
+  }
+
+  /** Creates the winner's invoice and sends the payment link. Only when staff press "Send invoice". */
+  async function sendInvoice(lot: Lot, quiet = false): Promise<boolean> {
+    if (!quiet) setNote(null);
+    if (IS_PREVIEW) {
+      setNote({ ok: false, text: "Preview mode: connect Supabase to send invoices." });
+      return false;
+    }
+    setSending(lot.id);
+    const j = await fetch(`/api/lots/${lot.id}/finalize`, { method: "POST" })
+      .then(r => r.json())
+      .catch(() => ({ ok: false, error: "Couldn’t reach the server. Try again." }));
+    setSending(null);
+    const name = `Lot ${pad2(lot.lot_number)}`;
+    let ok = false;
+    let text: string;
+    if (!j.ok) text = `${name}: ${j.error === "staff_only" ? "Staff only." : j.error || "Couldn’t send the invoice."}`;
+    else if (!j.invoice) text = `${name}: no invoice. The lot didn’t sell (no bids or reserve not met), or its timer hasn’t ended.`;
+    else if (!j.registered) {
+      ok = true;
+      text = `${name}: invoice ${j.number} created for @${j.ig}. They aren’t registered yet: link them to a paddle in Winners & payments and the payment link goes out.`;
+    } else if (j.alreadySent) {
+      ok = true;
+      text = `${name}: invoice ${j.number} was already sent.`;
+    } else if (j.sent?.sent) {
+      ok = true;
+      text = `${name}: invoice ${j.number} sent to ${leaderText(lot)}.${j.sent.errors?.length ? ` (${j.sent.errors.join(" · ")})` : ""}`;
+    } else {
+      text = `${name}: invoice ${j.number} created but not sent: ${(j.sent?.errors || []).join(" · ") || "unknown error"}. Try again, or resend from Winners & payments.`;
+    }
+    if (!quiet) setNote({ ok, text });
+    await loadData();
+    return ok;
+  }
+
+  async function sendAll() {
+    setNote(null);
+    setBusy(true);
+    let done = 0;
+    const list = [...unsent];
+    for (const l of list) {
+      if (await sendInvoice(l, true)) done++;
+    }
+    setBusy(false);
+    setNote({ ok: done === list.length, text: `${done} of ${list.length} invoices sent.${done < list.length ? " Check the list below for the rest." : ""}` });
+  }
+
+  function winnerLine(l: Lot) {
+    return `${money(l.current_bid ?? 0)} · ${leaderText(l)}`;
+  }
+
+  function invoiceButton(l: Lot, big = false) {
+    const inv = invoices.get(l.id);
+    if (inv?.notified_at) return <span className="pill pure">Invoice {inv.number} sent</span>;
+    const label = inv ? (inv.bidder_id ? "Send invoice again" : "Invoice waiting for contact") : "Send invoice";
+    if (inv && !inv.bidder_id) return <span className="pill">{label}</span>;
+    return (
+      <ConfirmButton
+        className={big ? "btn pri lg" : "btn sm"}
+        label={sending === l.id ? "Sending…" : label}
+        confirm={`Send to ${l.leader_paddle ? `paddle ${l.leader_paddle}` : "this winner"} for ${money(l.current_bid ?? 0)}? Tap again`}
+        disabled={busy || !!sending}
+        onConfirm={() => sendInvoice(l)}
+      />
+    );
   }
 
   /** Same timer for every lot in this auction that hasn't started yet. */
@@ -164,7 +220,7 @@ export function LiveConsole() {
     const paddle = /^\d+$/.test(v) ? Number(v) : null;
     const ig = paddle ? null : normIg(v);
     if (!paddle && !ig) return setNote({ ok: false, text: ERR.bidder_required });
-    const amt = Math.round(Number(amount.replace(/[^\d]/g, "")));
+    const amt = parseAmount(amount);
     setBusy(true);
     const { data: r, error } = await sb.rpc("staff_record_bid", { p_lot_id: sel.id, p_amount: amt, p_paddle: paddle, p_ig: ig, p_via: via, p_kind: kind });
     setBusy(false);
@@ -250,11 +306,12 @@ export function LiveConsole() {
                     </>
                   ) : null}
                   {blockSt === "block" || blockSt === "live" ? (
-                    <ConfirmButton className="btn danger" label="Hammer now" confirm={`Sell now at ${blockLot.current_bid == null ? "no bids" : num(blockLot.current_bid)}?`} onConfirm={() => lotAction(blockLot, "hammer", "Lot closed.")} />
+                    <ConfirmButton className="btn danger" label="Hammer now" confirm={`Sell now at ${blockLot.current_bid == null ? "no bids" : num(blockLot.current_bid)}?`} onConfirm={() => lotAction(blockLot, "hammer", "Lot closed. Check for missed bids, then press Send invoice.")} />
                   ) : null}
                   {!isPure(blockLot) && !isClosedStatus(blockSt) ? (
                     <ConfirmButton className="btn" label="Make pure sale" confirm="Sell whatever the price?" onConfirm={() => lotAction(blockLot, "pure", "Now a pure sale.")} />
                   ) : null}
+                  {blockSt === "sold" ? invoiceButton(blockLot, true) : null}
                   {isClosedStatus(blockSt) ? (
                     <>
                       {nexts[0] ? <button className="btn pri lg" type="button" disabled={busy} onClick={() => { setSelId(null); lotAction(nexts[0], "block", `Lot ${pad2(nexts[0].lot_number)} is on the block.`); }}>Next: lot {pad2(nexts[0].lot_number)}</button> : null}
@@ -263,9 +320,17 @@ export function LiveConsole() {
                   ) : null}
                   {blockSt !== "live" ? <ConfirmButton className="btn sm" label="Clear the block" confirm="Hide the live panel on the site?" onConfirm={() => lotAction(blockLot, "clear", "Block cleared.")} /> : null}
                 </div>
-                <p className="fine">
-                  {blockSt === "block" ? "Press Start at the same moment you start the timer on Instagram." : blockSt === "live" ? "Type in every bid that reaches you before 0:00." : "Reopen only to add a bid that arrived before 0:00, then hammer again."}
-                </p>
+                {blockSt === "sold" ? (
+                  <p className="alert info">
+                    Sold {winnerLine(blockLot)}. Check Instagram for any bid that arrived before 0:00 and isn’t typed in yet.
+                    If there is one, press Reopen. If not, press Send invoice (you can also send it later from the list on the right).
+                    {invoices.get(blockLot.id)?.notify_error && !invoices.get(blockLot.id)?.notified_at ? ` Last try: ${invoices.get(blockLot.id)!.notify_error}` : ""}
+                  </p>
+                ) : (
+                  <p className="fine">
+                    {blockSt === "block" ? "Press Start at the same moment you start the timer on Instagram." : blockSt === "live" ? "Type in every bid that reaches you before 0:00." : "Reopen only to add a bid that arrived before 0:00, then hammer again."}
+                  </p>
+                )}
               </>
             ) : (
               <>
@@ -335,11 +400,36 @@ export function LiveConsole() {
                 </label>
               </div>
               <p className="fine">
-                Lowest valid bid <b>{money(nextMinBid(sel))}</b> · {leaderText(sel)}
+                Any amount from <b>{money(minBid(sel))}</b> · usual step {money(nextMinBid(sel))} · {leaderText(sel)}
                 {isClosedStatus(statusOf(sel)) ? " · CLOSED" : ""}
               </p>
               <button className="btn pri lg" type="submit" disabled={busy || isClosedStatus(statusOf(sel))}>Record bid</button>
             </form>
+          ) : null}
+
+          {unsent.length ? (
+            <div className="panel-card">
+              <div className="row" style={{ justifyContent: "space-between" }}>
+                <span className="k">Sold · invoice not sent yet · {unsent.length}</span>
+                {unsent.length > 1 ? (
+                  <ConfirmButton className="btn sm" label={`Send all ${unsent.length}`} confirm={`Send ${unsent.length} invoices now? Tap again`} disabled={busy || !!sending} onConfirm={sendAll} />
+                ) : null}
+              </div>
+              <div className="tbl-wrap">
+                <table>
+                  <tbody>
+                    {unsent.map(l => (
+                      <tr key={l.id}>
+                        <td className="mono"><b>{pad2(l.lot_number)}</b></td>
+                        <td>{l.brand} {l.model}<div className="fine">{winnerLine(l)}</div></td>
+                        <td style={{ textAlign: "end" }}>{invoiceButton(l)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="fine">Nothing is sent until you press Send invoice. Reopen a lot first if a bid before 0:00 was missed.</p>
+            </div>
           ) : null}
 
           {sel ? (

@@ -14,11 +14,18 @@ export async function tamaraCreate(opts: {
   sku: string;
   lotId: string;
   consumer: { firstName: string; lastName: string; phone: string; email: string };
+  /** Delivery address, if the buyer gave one. Empty means they'll collect from us. */
+  ship?: { address: string; city: string };
   lang: "en" | "ar";
   urls: { success: string; failure: string; cancel: string; notification: string };
 }) {
   const c = opts.consumer;
-  const address = { first_name: c.firstName, last_name: c.lastName, line1: "Collection from The Time Souk", city: "Dubai", country_code: "AE", phone_number: c.phone };
+  const address = {
+    first_name: c.firstName, last_name: c.lastName,
+    line1: opts.ship?.address ? opts.ship.address.slice(0, 250) : "Collection from The Time Souk",
+    city: opts.ship?.address ? (opts.ship.city || "Dubai").slice(0, 80) : "Dubai",
+    country_code: "AE", phone_number: c.phone
+  };
   const instalments = Number(process.env.TAMARA_INSTALMENTS) || undefined;
   const res = await fetch(`${base()}/checkout`, {
     method: "POST",

@@ -10,10 +10,15 @@ export type InvoiceCtx = {
   invoice: Invoice;
   lot: { id: string; lot_number: number; brand: string; model: string; reference: string; photos: string[]; case_material: string; bracelet: string; dial_colour: string; bezel: string; shape: string; hands: string };
   auction: { id: string; number: number; sale_date: string };
-  buyer: { id: string; full_name: string; email: string; phone: string | null; lang: Locale; paddle: number; created_at: string } | null;
+  buyer: { id: string; full_name: string; email: string; phone: string | null; lang: Locale; paddle: number; created_at: string; address: string; city: string } | null;
   lang: Locale;
   payUrl: string;
+  /** The cash on delivery charge from Settings (what COD would add to this invoice). */
+  codFee: number;
 };
+
+/** What the buyer pays: the winning bid, plus the cash on delivery charge if they chose it. */
+export const invoiceTotal = (i: Pick<Invoice, "amount" | "cod_fee" | "cod_requested_at">) => i.amount + (i.cod_requested_at ? i.cod_fee || 0 : 0);
 
 export const payUrl = (lang: Locale, token: string) => `${SITE_URL}/${lang}/pay/${token}`;
 export const lotTitle = (lot: { lot_number: number; brand: string; model: string }, lang: Locale) =>
@@ -25,16 +30,18 @@ export async function invoiceContext(by: { id?: string; token?: string }): Promi
   q = by.id ? q.eq("id", by.id) : q.eq("pay_token", by.token || "-");
   const { data: invoice } = await q.maybeSingle();
   if (!invoice) return null;
-  const [{ data: lot }, { data: auction }, { data: buyer }] = await Promise.all([
+  const [{ data: lot }, { data: auction }, { data: buyer }, { data: settings }] = await Promise.all([
     db.from("lots").select("id,lot_number,brand,model,reference,photos,case_material,bracelet,dial_colour,bezel,shape,hands").eq("id", invoice.lot_id).single(),
     db.from("auctions").select("id,number,sale_date").eq("id", invoice.auction_id).single(),
     invoice.bidder_id
-      ? db.from("profiles").select("id,full_name,email,phone,lang,paddle,created_at").eq("id", invoice.bidder_id).maybeSingle()
-      : Promise.resolve({ data: null })
+      ? db.from("profiles").select("id,full_name,email,phone,lang,paddle,created_at,address,city").eq("id", invoice.bidder_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    db.from("settings").select("*").eq("id", 1).maybeSingle()
   ]);
   if (!lot || !auction) return null;
   const lang: Locale = buyer?.lang === "ar" ? "ar" : "en";
-  return { invoice: invoice as Invoice, lot, auction, buyer: buyer as InvoiceCtx["buyer"], lang, payUrl: payUrl(lang, invoice.pay_token) };
+  const codFee = Number((settings as { cod_fee?: number } | null)?.cod_fee ?? 10);
+  return { invoice: invoice as Invoice, lot, auction, buyer: buyer as InvoiceCtx["buyer"], lang, payUrl: payUrl(lang, invoice.pay_token), codFee };
 }
 
 const firstName = (n: string) => (n || "").trim().split(/\s+/)[0] || "";
@@ -45,13 +52,20 @@ function wonCopy(c: InvoiceCtx, reminder = false) {
   const amount = money(c.invoice.amount, lang);
   const due = dateLong(c.invoice.due_date, lang);
   const name = firstName(c.buyer?.full_name || "");
+  const fee = money(c.codFee, lang);
+  const waysEn = c.codFee
+    ? `Pay by card, Tabby, Tamara or bank transfer, or choose cash on delivery (${fee} added).`
+    : "Pay by card, Tabby, Tamara or bank transfer, or choose cash on delivery.";
+  const waysAr = c.codFee
+    ? `يمكنك الدفع بالبطاقة أو تابي أو تمارا أو التحويل البنكي، أو اختيار الدفع عند الاستلام (تُضاف ${fee}).`
+    : "يمكنك الدفع بالبطاقة أو تابي أو تمارا أو التحويل البنكي، أو اختيار الدفع عند الاستلام.";
   if (lang === "ar") {
     return {
       subject: reminder ? `تذكير: ادفع قبل ${due} · ${title}` : `مبروك! فزت بـ ${title}`,
       heading: reminder ? "تذكير بالدفع" : `مبروك${name ? " يا " + name : ""}!`,
       blocks: reminder
-        ? [`فاتورتك ${c.invoice.number} لـ ${title} بقيمة ${amount} مستحقة ${due}.`, "يمكنك الدفع بالبطاقة أو تابي أو تمارا أو التحويل البنكي."]
-        : [`فزت بـ ${title} في المزاد رقم ${pad2(c.auction.number)}.`, `المبلغ المستحق: ${amount} (بدون عمولة على المشتري).`, `يرجى الدفع قبل ${due}. يمكنك الدفع بالبطاقة أو تابي أو تمارا أو التحويل البنكي.`],
+        ? [`فاتورتك ${c.invoice.number} لـ ${title} بقيمة ${amount} مستحقة ${due}.`, waysAr]
+        : [`فزت بـ ${title} في المزاد رقم ${pad2(c.auction.number)}.`, `المبلغ المستحق: ${amount} (بدون عمولة على المشتري).`, `يرجى الدفع قبل ${due}. ${waysAr}`],
       button: "ادفع الآن",
       footer: `تايم سوق، دبي · الفاتورة ${c.invoice.number}`
     };
@@ -60,8 +74,8 @@ function wonCopy(c: InvoiceCtx, reminder = false) {
     subject: reminder ? `Reminder: please pay by ${due} · ${title}` : `You won ${title}`,
     heading: reminder ? "Payment reminder" : `Congratulations${name ? ", " + name : ""}!`,
     blocks: reminder
-      ? [`Your invoice ${c.invoice.number} for ${title} (${amount}) is due ${due}.`, "Pay by card, Tabby, Tamara or bank transfer."]
-      : [`You won ${title} in Auction Nº ${pad2(c.auction.number)}.`, `Amount due: ${amount} (no buyer’s premium).`, `Please pay by ${due}. Pay by card, Tabby, Tamara or bank transfer.`],
+      ? [`Your invoice ${c.invoice.number} for ${title} (${amount}) is due ${due}.`, waysEn]
+      : [`You won ${title} in Auction Nº ${pad2(c.auction.number)}.`, `Amount due: ${amount} (no buyer’s premium).`, `Please pay by ${due}. ${waysEn}`],
     button: "Pay now",
     footer: `The Time Souk, Dubai · Invoice ${c.invoice.number}`
   };
@@ -127,6 +141,40 @@ export async function notifyInvoice(invoiceId: string, opts: { force?: boolean }
   return r;
 }
 
+export type SendResult = {
+  ok: boolean;
+  error?: string;
+  invoice: string | null;
+  number: string;
+  alreadySent: boolean;
+  registered: boolean;
+  ig: string | null;
+  sent: { sent: number; errors: string[] } | null;
+};
+
+/**
+ * "Send invoice" (live console and Winners & payments): creates the winner's invoice once, then emails and
+ * WhatsApps the payment link. Nothing creates or sends an invoice until staff press it.
+ */
+export async function createAndSendInvoice(lotId: string): Promise<SendResult> {
+  const db = adminClient();
+  const { data: invoiceId, error } = await db.rpc("finalize_lot", { p_lot_id: lotId });
+  if (error) return { ok: false, error: error.message, invoice: null, number: "", alreadySent: false, registered: false, ig: null, sent: null };
+  if (!invoiceId) return { ok: true, invoice: null, number: "", alreadySent: false, registered: false, ig: null, sent: null };
+  const { data: inv } = await db.from("invoices").select("number, notified_at, bidder_id, ig_handle").eq("id", invoiceId).single();
+  let sent = null;
+  if (inv && !inv.notified_at && inv.bidder_id) sent = await notifyInvoice(invoiceId as string);
+  return {
+    ok: true,
+    invoice: invoiceId as string,
+    number: inv?.number || "",
+    alreadySent: !!inv?.notified_at,
+    registered: !!inv?.bidder_id,
+    ig: inv?.ig_handle || null,
+    sent
+  };
+}
+
 export async function remindInvoice(invoiceId: string) {
   const c = await invoiceContext({ id: invoiceId });
   if (!c || c.invoice.status !== "unpaid") return { sent: 0, errors: ["Invoice not unpaid"] };
@@ -138,9 +186,11 @@ export async function remindInvoice(invoiceId: string) {
 /** Marks an invoice paid once (safe to call repeatedly) and sends the receipt. */
 export async function markPaid(invoiceId: string, method: NonNullable<Invoice["method"]>, by?: string) {
   const now = new Date().toISOString();
+  // Paid online or by transfer: the cash on delivery charge no longer applies.
+  const dropCod = method === "card" || method === "tabby" || method === "tamara" || method === "bank";
   const { data } = await adminClient()
     .from("invoices")
-    .update({ status: "paid", method, paid_at: now, updated_at: now })
+    .update({ status: "paid", method, paid_at: now, updated_at: now, ...(dropCod ? { cod_fee: 0, cod_requested_at: null } : {}) })
     .eq("id", invoiceId)
     .neq("status", "paid")
     .neq("status", "void")
@@ -151,7 +201,7 @@ export async function markPaid(invoiceId: string, method: NonNullable<Invoice["m
   const c = await invoiceContext({ id: invoiceId });
   if (c) {
     const title = lotTitle(c.lot, c.lang);
-    const amount = money(c.invoice.amount, c.lang);
+    const amount = money(invoiceTotal(c.invoice), c.lang);
     if (c.buyer?.email && emailReady()) {
       const ar = c.lang === "ar";
       const heading = ar ? "تم الدفع. شكراً لك!" : "Payment received. Thank you!";
@@ -162,7 +212,7 @@ export async function markPaid(invoiceId: string, method: NonNullable<Invoice["m
     }
     const staff = staffEmails();
     if (staff.length && emailReady()) {
-      const line = `${c.invoice.number} · ${lotTitle(c.lot, "en")} · ${money(c.invoice.amount)} · paid by ${method}${c.buyer ? ` · paddle ${c.buyer.paddle} ${c.buyer.full_name}` : ""}`;
+      const line = `${c.invoice.number} · ${lotTitle(c.lot, "en")} · ${money(invoiceTotal(c.invoice))} · paid by ${method === "cod" ? "cash on delivery" : method}${c.buyer ? ` · paddle ${c.buyer.paddle} ${c.buyer.full_name}` : ""}`;
       await sendEmail({ to: staff, subject: `Paid: ${lotTitle(c.lot, "en")}`, text: line, html: emailHtml({ lang: "en", heading: "Invoice paid", blocks: [line], button: { label: "Open payments", href: `${SITE_URL}/admin/payments` }, footer: "The Time Souk admin" }) });
     }
   }

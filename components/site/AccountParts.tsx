@@ -31,6 +31,8 @@ export function AccountForm({ locale, me }: { locale: Locale; me: MyStatus }) {
   const [country, setCountry] = useState(COUNTRY_VALUES.includes(me.country) ? me.country : "Other");
   const [ig, setIg] = useState(me.instagram ? `@${me.instagram}` : "");
   const [lang, setLang] = useState<Locale>(me.lang);
+  const [address, setAddress] = useState(me.address || "");
+  const [city, setCity] = useState(me.city || "");
   const [msg, setMsg] = useState("");
   return (
     <form
@@ -38,7 +40,10 @@ export function AccountForm({ locale, me }: { locale: Locale; me: MyStatus }) {
       onSubmit={async e => {
         e.preventDefault();
         setMsg("");
-        const { error } = await browserClient()!.rpc("complete_profile", { p_full_name: name, p_country: country, p_instagram: ig, p_lang: lang, p_accept_terms: true });
+        const { error } = await browserClient()!.rpc("complete_profile", {
+          p_full_name: name, p_country: country, p_instagram: ig, p_lang: lang, p_accept_terms: true,
+          p_address: address.trim(), p_city: city.trim()
+        });
         setMsg(error ? (error.message.startsWith("instagram_taken") ? t.auth.igTaken : t.bid.errors.generic) : t.account.saved);
         if (!error) router.refresh();
       }}
@@ -50,6 +55,10 @@ export function AccountForm({ locale, me }: { locale: Locale; me: MyStatus }) {
         </select>
       </label>
       <label className="field">{t.auth.instagram}<input value={ig} onChange={e => setIg(e.target.value)} dir="ltr" /></label>
+      <label className="field">{t.auth.address}
+        <textarea rows={2} maxLength={500} autoComplete="street-address" placeholder={t.auth.addressPh} value={address} onChange={e => setAddress(e.target.value)} />
+      </label>
+      <label className="field">{t.auth.city}<input maxLength={80} autoComplete="address-level2" value={city} onChange={e => setCity(e.target.value)} /></label>
       <label className="field">Language · اللغة
         <select value={lang} onChange={e => setLang(e.target.value as Locale)}>
           <option value="en">English</option>

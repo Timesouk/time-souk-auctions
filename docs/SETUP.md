@@ -42,9 +42,10 @@ These involve approvals by other companies. Start them now and carry on with the
 1. On GitHub, open `supabase/migrations/0001_init.sql` in the repository and click the **Copy raw file** button (top-right of the file).
 2. In Supabase: **SQL Editor → New query**. Paste. Click **Run**. You should see **Success. No rows returned**.
 3. Do the same with `supabase/migrations/0002_timers.sql` (adjustable timers). Run it **after** 0001.
+   Then `supabase/migrations/0003_any_amount_cod_address.sql` (bid any amount, cash on delivery, delivery addresses). Run it **after** 0002.
 4. Check **Table Editor**: you should see tables such as `auctions`, `lots`, `bids`, `invoices`, `profiles`.
 
-> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 is safe to run again.
+> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 and 0003 are safe to run again.
 
 ### 1.3 Copy the API keys into Vercel later
 You'll need these three values in Part 3. Find them in **Project Settings → API Keys** (and **Project Settings → Data API** for the URL):
@@ -303,9 +304,10 @@ Use a separate test auction, number **99**, with 3 or 4 lots. Do it with a colle
 - [ ] A website bid lands while the timer runs; it appears in the console.
 - [ ] When the bid reaches the reserve, the site shows **Pure sale**.
 - [ ] At 0:00 the lot closes on its own. A bid after 0:00 is refused.
-- [ ] Within about a minute the winner gets the payment link by **email and WhatsApp**.
+- [ ] Nothing is sent yet. Press **Send invoice** (tap twice): the winner gets the payment link by **email and WhatsApp**.
+- [ ] On the payment page, type a delivery address and choose **Cash on delivery**: the total goes up by the cash on delivery charge (AED 10 by default, **Admin → Settings**).
 - [ ] Pay one test invoice each way: **Ziina** test card, **Tabby** test account, **Tamara** sandbox, and **bank transfer** (mark it paid in **Admin → Payments**). Each shows **Paid** and the buyer gets a receipt.
-- [ ] **Reopen:** close a lot, reopen it, record a missed bid, **Hammer now**: the old invoice is cancelled and a new one is created.
+- [ ] **Reopen:** close a lot, reopen it, record a missed bid, **Hammer now**, then **Send invoice**: it goes to the new winner.
 - [ ] Afterwards: **Unpublish** auction 99 so it's hidden, and **Cancel** its test invoices in **Admin → Payments**.
 
 ### 9.2 Go-live switches
@@ -349,13 +351,17 @@ Change these in Vercel, then **Redeploy**:
 7. At **0:00** the lot closes. It's sudden death: a running timer can't be lengthened or shortened.
    - If an Instagram bid arrived **before 0:00** but wasn't typed in time: **Reopen lot → record the bid → Hammer now**.
    - **Restart timer** starts the lot's full timer again (use it if the Instagram timer and the site went out of step).
-8. Press **Next**.
+8. **Nothing goes to the winner on its own.** When you're sure no bid was missed, press **Send invoice** (tap it twice). Or press **Next** and send it later: every sold lot waits in **Sold · invoice not sent yet** on the right of the console (and in **Winners & payments**), with **Send all** for the end of the sale.
+9. Press **Next**.
+
+Bidders can bid **any amount** above the current bid (the quick buttons and max bids still use the usual steps). In **Record a bid** you can also type any amount above the current bid.
 
 **After the sale**
-- Winners who bid on the website get their payment link automatically within a minute of their lot closing.
+- Send any invoices still waiting: **Live console → Sold · invoice not sent yet → Send all**, or one by one in **Winners & payments**.
 - **Instagram winners without an account:** in **Admin → Payments**, the invoice shows their `@handle`. Use **Copy pay link** to send it yourself, or once they register, enter their paddle number and press **Link & send payment link**.
 - The day before each invoice is due, a reminder goes out automatically (between 10 am and 8 pm Dubai time). **Resend email & WhatsApp** sends the link again at any time.
 - **Bank transfers:** when the money arrives, find the invoice → choose **Bank transfer** → **Mark paid**. The buyer gets a receipt.
+- **Cash on delivery:** the invoice shows *Cash on delivery · collect AED …* and the delivery address, and you get an email. Deliver, collect the cash, then choose **Cash on delivery** → **Mark paid**. Cash on delivery invoices never show as overdue and get no reminder.
 - **Consignors:** each consigned lot shows the seller fee and what you owe the consignor. Press **Mark consignor paid** when you've paid them.
 - **Admin → Payments → Download CSV** gives your accountant every sale.
 
@@ -366,7 +372,7 @@ Change these in Vercel, then **Redeploy**:
 | Problem | Fix |
 |---|---|
 | Site still shows sample watches | Supabase variables missing, or you didn't redeploy after adding them. |
-| Site shows an error after connecting Supabase | Check both database files ran: `0001_init.sql`, then `0002_timers.sql` (Part 1.2). |
+| Site shows an error after connecting Supabase | Check all three database files ran: `0001_init.sql`, `0002_timers.sql`, then `0003_any_amount_cod_address.sql` (Part 1.2). |
 | Can't change the timer on a lot | Its timer is running. Sudden death: stop it, or let it end and Reopen. |
 | No email code | Check Resend → **Logs**. Check Supabase SMTP settings (Part 2.3), and that the templates contain `{{ .Token }}`. Look in spam. |
 | Email code says "invalid" | Codes expire after 10 minutes and only the newest code works. Ask for a new one. |

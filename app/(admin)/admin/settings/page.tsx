@@ -39,7 +39,7 @@ export default async function SettingsPage() {
       <div className="cols">
         <div className="panel-card">
           <span className="k">Auction rules and contact</span>
-          <SettingsForm initial={{ seller_fee: Number(s?.seller_fee ?? 7.5), pay_days: s?.pay_days ?? 3, timer_seconds: s?.timer_seconds ?? 180, lot_target: s?.lot_target ?? 100, whatsapp: s?.whatsapp || "", instagram: s?.instagram || "", contact_email: s?.contact_email || "", bank_details: p?.bank_details || "" }} />
+          <SettingsForm initial={{ seller_fee: Number(s?.seller_fee ?? 7.5), pay_days: s?.pay_days ?? 3, timer_seconds: s?.timer_seconds ?? 180, lot_target: s?.lot_target ?? 100, cod_fee: Number((s as { cod_fee?: number } | null)?.cod_fee ?? 10), whatsapp: s?.whatsapp || "", instagram: s?.instagram || "", contact_email: s?.contact_email || "", bank_details: p?.bank_details || "" }} />
         </div>
         <div className="panel-card">
           <span className="k">Connections</span>

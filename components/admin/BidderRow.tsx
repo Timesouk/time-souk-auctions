@@ -5,7 +5,7 @@ import { updateBidder } from "@/app/(admin)/admin/actions";
 
 export type BidderRowData = {
   id: string; paddle: number; full_name: string; email: string; phone: string | null; phone_verified: boolean; email_verified: boolean;
-  country: string; instagram: string | null; instagram_confirmed: boolean; role: string; suspended: boolean; terms: boolean; created_at: string;
+  country: string; address: string; instagram: string | null; instagram_confirmed: boolean; role: string; suspended: boolean; terms: boolean; created_at: string;
   notes: string; id_checked: boolean; wins: number; unpaid: number;
 };
 
@@ -19,7 +19,7 @@ export function BidderRow({ b, canRole }: { b: BidderRowData; canRole: boolean }
     <>
       <tr>
         <td className="mono">{b.paddle}</td>
-        <td><b>{b.full_name || "—"}</b><br /><span className="fine">{b.country}</span></td>
+        <td><b>{b.full_name || "—"}</b><br /><span className="fine">{b.country}</span>{b.address ? <><br /><span className="fine">{b.address}</span></> : null}</td>
         <td style={{ fontSize: 13 }}>{b.email} {b.email_verified ? "✓" : ""}<br /><span className="mono">{b.phone || "no phone"}</span> {b.phone_verified ? "✓" : ""}</td>
         <td>{b.instagram ? `@${b.instagram}` : "—"} {b.instagram ? (b.instagram_confirmed ? <span className="pill ok">confirmed</span> : <span className="pill">unconfirmed</span>) : null}</td>
         <td>

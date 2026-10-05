@@ -138,17 +138,65 @@ test("pre-bids only open at the set time and never on drafts", async () => {
   await expectError(bid(A, lotDraft, 40000), "bidding_not_open");
 });
 
-test("first bid at the starting price, then full bid steps", async () => {
+test("first bid at the starting price, then any amount above the current bid", async () => {
   const lot = await makeLot(await makeAuction());
   await expectError(bid(A, lot, 39000), "bid_too_low:40000");
   const r = await bid(A, lot, 40000);
   assert.equal(r.price, 40000);
   assert.equal(r.leading, true);
-  await expectError(bid(B, lot, 40500), "bid_too_low:41000");
+  await expectError(bid(B, lot, 40000), "bid_too_low:40001");
   await expectError(bid(A, lot, 42000), "already_leading");
-  const r2 = await bid(B, lot, 41000);
-  assert.equal(r2.price, 41000);
+  const r2 = await bid(B, lot, 40250);
+  assert.equal(r2.price, 40250);
   assert.equal((await lotRow(lot)).leader_paddle, B.paddle);
+  const r3 = await staffBid(S, lot, 40251, { ig: "@quick.raise" });
+  assert.equal(r3.price, 40251);
+});
+
+test("a max bid still answers a free-amount bid with one bid step, up to its limit", async () => {
+  const lot = await makeLot(await makeAuction(), { start: 10000, reserve: 50000 });
+  await bid(A, lot, 20000, "max");
+  assert.equal((await lotRow(lot)).current_bid, 10000);
+  const r = await bid(B, lot, 12345);
+  assert.equal(r.leading, false);
+  assert.equal(r.price, 12345 + 500);
+  const r2 = await bid(B, lot, 19999);
+  assert.equal(r2.leading, false);
+  assert.equal(r2.price, 20000);
+});
+
+test("delivery address: saved at sign-up, kept when not sent, and shown to the bidder only", async () => {
+  const P = await makeUser("addr@test.ae");
+  const s1 = await as(P.id, () => one("select complete_profile('Addr Person', 'United Arab Emirates', null, 'en', true, 'Villa 12, Street 4, Al Barsha', 'Dubai') as s")).then(x => x.s);
+  assert.equal(s1.address, "Villa 12, Street 4, Al Barsha");
+  assert.equal(s1.city, "Dubai");
+  const s2 = await as(P.id, () => one("select complete_profile('Addr Person', 'United Arab Emirates', null, 'en', true) as s")).then(x => x.s);
+  assert.equal(s2.address, "Villa 12, Street 4, Al Barsha");
+  await db.query("set role authenticated");
+  try {
+    const seen = await as(A.id, () => all("select address from profiles where id = $1", [P.id]));
+    assert.equal(seen.length, 0);
+  } finally {
+    await db.query("reset role");
+  }
+});
+
+test("cash on delivery is an allowed payment method and defaults to a 10 dirham fee", async () => {
+  assert.equal((await one("select cod_fee from settings where id = 1")).cod_fee, 10);
+  const auc = await makeAuction();
+  const lot = await makeLot(auc, { noReserve: true });
+  await bid(A, lot, 40000);
+  await closeLot(lot);
+  await db.query("update profiles set address = 'Office 5, Gate Village', city = 'Dubai' where id = $1", [A.id]);
+  const inv = (await one("select finalize_lot($1) as id", [lot])).id;
+  const addr = await one("select delivery_address, delivery_city from invoices where id = $1", [inv]);
+  assert.equal(addr.delivery_address, "Office 5, Gate Village");
+  assert.equal(addr.delivery_city, "Dubai");
+  await db.query("update profiles set address = '', city = '' where id = $1", [A.id]);
+  await db.query("update invoices set method = 'cod', cod_fee = 10, cod_requested_at = now() where id = $1", [inv]);
+  const row = await one("select amount + cod_fee as total from invoices where id = $1", [inv]);
+  assert.equal(row.total, 40010);
+  await expectError(db.query("update invoices set method = 'cheque' where id = $1", [inv]), "new row for relation");
 });
 
 test("a max bid answers one step at a time", async () => {
@@ -353,12 +401,14 @@ test("timers: settings default, then the auction's, then the lot's own; never ch
   await db.query("update settings set timer_seconds = 180 where id = 1");
 });
 
-test("invoices: created once for sold lots, due in working days", async () => {
+test("invoices: created once for sold lots, due in working days from the day it's sent", async () => {
+  // Saturday 26 September 2026: three working days later is Wednesday 30th.
+  assert.equal((await one("select add_working_days('2026-09-26', 3)::text d")).d, "2026-09-30");
   const auc = await makeAuction();
   const lot = await makeLot(auc, { reserve: 46000 });
   await bid(A, lot, 40000);
   await bid(B, lot, 47000);
-  // Won on Saturday 26 September 2026 at 4:05 pm in Dubai: due three working days later, Wednesday 30th.
+  // Won on 26 September, invoice sent today: the deadline counts from today.
   await db.query("update lots set ends_at = '2026-09-26 16:05:00+04' where id = $1", [lot]);
   const id1 = (await one("select finalize_lot($1) id", [lot])).id;
   const id2 = (await one("select finalize_lot($1) id", [lot])).id;
@@ -367,7 +417,8 @@ test("invoices: created once for sold lots, due in working days", async () => {
   const inv = await one("select number, amount, bidder_id, due_date::text due, status, length(pay_token) tl from invoices where id = $1", [id1]);
   assert.equal(inv.amount, 47000);
   assert.equal(inv.bidder_id, B.id);
-  assert.equal(inv.due, "2026-09-30");
+  const expected = (await one("select add_working_days((now() at time zone 'Asia/Dubai')::date, 3)::text d")).d;
+  assert.equal(inv.due, expected);
   assert.equal(inv.status, "unpaid");
   assert.equal(inv.tl, 48);
   assert.match(inv.number, /^TS-\d{3}-\d{3}$/);

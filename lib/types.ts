@@ -4,6 +4,7 @@ export type Settings = {
   seller_fee: number;
   pay_days: number;
   timer_seconds: number;
+  cod_fee?: number;
   lot_target: number;
   whatsapp: string;
   instagram: string;
@@ -76,6 +77,8 @@ export type MyStatus = {
   phone_verified: boolean;
   terms_accepted: boolean;
   country: string;
+  address?: string;
+  city?: string;
   instagram: string | null;
   lang: Locale;
   role: "bidder" | "staff" | "admin";
@@ -104,7 +107,11 @@ export type Invoice = {
   amount: number;
   due_date: string;
   status: "unpaid" | "processing" | "paid" | "void";
-  method: "card" | "tabby" | "tamara" | "bank" | "cash" | null;
+  method: "card" | "tabby" | "tamara" | "bank" | "cash" | "cod" | null;
+  cod_fee?: number;
+  cod_requested_at?: string | null;
+  delivery_address?: string;
+  delivery_city?: string;
   paid_at: string | null;
   pay_token: string;
   notified_at: string | null;

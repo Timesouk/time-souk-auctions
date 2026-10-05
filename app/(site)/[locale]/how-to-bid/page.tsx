@@ -60,6 +60,7 @@ export default async function HowPage({ params }: { params: Promise<{ locale: st
           </div>
           <div className="block">
             <h2 className="h3">{h.steps2}</h2>
+            <p className="fine">{h.stepsNote}</p>
             <div className="tbl-wrap">
               <table>
                 <thead><tr><th>{h.stepCurrent}</th><th className="n">{h.stepAdds}</th></tr></thead>
