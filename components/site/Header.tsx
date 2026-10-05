@@ -1,8 +1,9 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useState } from "react";
 import { Logo } from "../Logo";
+import { browserClient } from "@/lib/supabase/client";
 import type { Dict } from "@/lib/i18n/dict";
 import type { Locale } from "@/lib/types";
 
@@ -17,6 +18,13 @@ type Props = {
 export function Header({ locale, t, auctionNo, isLive, paddle }: Props) {
   const path = usePathname() || `/${locale}`;
   const [open, setOpen] = useState(false);
+  const router = useRouter();
+  async function signOut() {
+    setOpen(false);
+    await browserClient()?.auth.signOut();
+    router.push(`/${locale}`);
+    router.refresh();
+  }
   const other = locale === "en" ? "ar" : "en";
   const switchHref = path.replace(/^\/(en|ar)(?=\/|$)/, `/${other}`);
   const links: [string, string, boolean?][] = [
@@ -43,7 +51,10 @@ export function Header({ locale, t, auctionNo, isLive, paddle }: Props) {
         <div className="acts">
           <a className="langb" href={switchHref} lang={other} hrefLang={other}>{t.otherLang}</a>
           {paddle ? (
-            <Link className="paddle-chip" href={`/${locale}/account`} title={t.nav.account}>#{paddle}</Link>
+            <>
+              <Link className="paddle-chip" href={`/${locale}/account`} title={t.nav.account}>#{paddle}</Link>
+              <button className="plain linkbtn hide-m" type="button" onClick={signOut}>{t.nav.signOut}</button>
+            </>
           ) : (
             <>
               <Link className="plain hide-m" href={`/${locale}/sign-in`}>{t.nav.signIn}</Link>
@@ -61,7 +72,10 @@ export function Header({ locale, t, auctionNo, isLive, paddle }: Props) {
           <Link key={href} href={href} onClick={() => setOpen(false)}>{label}</Link>
         ))}
         {paddle ? (
-          <Link href={`/${locale}/account`} onClick={() => setOpen(false)}>{t.nav.account}</Link>
+          <>
+            <Link href={`/${locale}/account`} onClick={() => setOpen(false)}>{t.nav.account}</Link>
+            <button className="linkbtn" type="button" onClick={signOut}>{t.nav.signOut}</button>
+          </>
         ) : (
           <Link href={`/${locale}/sign-in`} onClick={() => setOpen(false)}>{t.nav.signIn}</Link>
         )}

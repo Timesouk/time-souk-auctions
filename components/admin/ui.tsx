@@ -1,4 +1,5 @@
 "use client";
+import { browserClient } from "@/lib/supabase/client";
 // Small helpers for admin forms: run a server action, show its message.
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
@@ -42,6 +43,25 @@ export function ConfirmButton({ label, confirm, onConfirm, className = "btn sm",
       }}
     >
       {armed ? confirm : label}
+    </button>
+  );
+}
+
+/** Signs the staff member out and goes back to the website's home page. */
+export function AdminSignOut() {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      className="linkbtn"
+      style={{ color: "var(--yellow)", textDecoration: "underline" }}
+      onClick={async () => {
+        await browserClient()?.auth.signOut();
+        router.push("/en");
+        router.refresh();
+      }}
+    >
+      Sign out
     </button>
   );
 }

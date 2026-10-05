@@ -131,6 +131,8 @@ button { font: inherit; }
 .langb { font-family: var(--f-mono); font-size: 12px; font-weight: 600; border: 2px solid var(--ink); padding: 4px 8px; text-decoration: none; }
 .acts .plain { text-decoration: none; }
 .acts .plain:hover { text-decoration: underline; }
+.linkbtn { background: none; border: 0; padding: 0; font: inherit; color: inherit; cursor: pointer; }
+.acts .linkbtn:hover { text-decoration: underline; }
 .paddle-chip { font-family: var(--f-mono); font-size: 12px; font-weight: 600; background: var(--ink); color: var(--yellow); padding: 4px 8px; text-decoration: none; }
 .menu-btn { display: none; background: none; border: 0; padding: 6px; cursor: pointer; }
 .menu-btn span { display: block; width: 26px; height: 3px; background: var(--ink); margin: 5px 0; }
@@ -142,7 +144,7 @@ button { font: inherit; }
   .acts { margin-inline-start: auto; }
   .logo { height: 48px; }
   .mobile-nav[data-open="true"] { display: block; border-top: 2px solid var(--ink); background: var(--paper); }
-  .mobile-nav a { display: block; padding: 14px var(--gutter); font-weight: 800; font-size: 17px; text-decoration: none; border-bottom: 1px solid var(--line); }
+  .mobile-nav a, .mobile-nav .linkbtn { display: block; width: 100%; text-align: start; padding: 14px var(--gutter); font-weight: 800; font-size: 17px; text-decoration: none; border-bottom: 1px solid var(--line); }
 }
 @media (max-width: 420px) { .acts .btn.pri { padding: 8px 10px; font-size: 13px; } }
 

@@ -7,6 +7,7 @@ import "../../admin.css";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { AdminNav } from "@/components/admin/AdminNav";
+import { AdminSignOut } from "@/components/admin/ui";
 import { Logo } from "@/components/Logo";
 import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
@@ -27,6 +28,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               <strong className="mono" style={{ color: "var(--yellow)" }}>ADMIN</strong>
               <span className="who">
                 {IS_PREVIEW ? "Preview mode: sample data, nothing is saved" : staff ? `${staff.name} · ${staff.role}` : "Not signed in"} · <Link href="/en">View site</Link>
+                {staff ? <> · <AdminSignOut /></> : null}
               </span>
             </div>
           </div>
