@@ -309,7 +309,8 @@ Use a separate test auction, number **99**, with 3 or 4 lots. Do it with a colle
 - [ ] On the payment page, type a delivery address, keep the country as **United Arab Emirates** and choose **Cash on delivery**: the total goes up by the cash on delivery charge (AED 10 by default, **Admin → Settings**). Change the country to Oman: **Cash on delivery** greys out.
 - [ ] Pay one test invoice each way: **Ziina** test card, **Tabby** test account, **Tamara** sandbox, and **bank transfer** (mark it paid in **Admin → Payments**). Each shows **Paid** and the buyer gets a receipt.
 - [ ] **Reopen:** close a lot, reopen it, record a missed bid, **Hammer now**, then **Send invoice**: it goes to the new winner.
-- [ ] Afterwards: **Unpublish** auction 99 so it's hidden, and **Cancel** its test invoices in **Admin → Payments**.
+- [ ] **Run it again?** Open auction 99 in **Auctions & lots**, scroll to **Reset for another rehearsal**, type `99` and press **Reset all lots**. Every lot goes back to its starting price (bids, timers and test invoices cleared). Admins only; never use it on a real auction.
+- [ ] Afterwards: **Unpublish** auction 99 so it's hidden, and **Cancel** its test invoices in **Admin → Payments** (or use the reset above).
 
 ### 9.2 Go-live switches
 Change these in Vercel, then **Redeploy**:

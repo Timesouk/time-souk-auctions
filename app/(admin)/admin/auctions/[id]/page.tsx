@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AuctionForm, AuctionStatusButtons } from "@/components/admin/AuctionForm";
-import { ImportLots, Relist } from "@/components/admin/ImportLots";
+import { ImportLots, RehearsalReset, Relist } from "@/components/admin/ImportLots";
 import { adminClient } from "@/lib/supabase/admin";
 import { IS_PREVIEW } from "@/lib/env";
 import { dateLong, dubaiParts, num, pad2, stamp } from "@/lib/format";
@@ -108,6 +108,13 @@ export default async function AuctionAdmin({ params }: { params: Promise<{ id: s
         <div className="panel-card"><span className="k">Paste lots from Excel</span><ImportLots auctionId={auction.id} /></div>
         <div className="panel-card"><span className="k">Unsold from earlier auctions</span><Relist auctionId={auction.id} lots={relistable} /></div>
       </div>
+
+      {lots?.length ? (
+        <div className="panel-card" style={{ maxWidth: 640 }}>
+          <span className="k">Reset for another rehearsal</span>
+          <RehearsalReset auctionId={auction.id} number={auction.number} />
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Msg, useAction } from "./ui";
-import { importLots, relistLots } from "@/app/(admin)/admin/actions";
+import { importLots, relistLots, resetAuctionForRehearsal } from "@/app/(admin)/admin/actions";
 import { HEAD_COLS, parsePaste } from "@/lib/import";
 
 export function ImportLots({ auctionId }: { auctionId: string }) {
@@ -46,6 +46,28 @@ export function Relist({ auctionId, lots }: { auctionId: string; lots: { id: str
       </div>
       <div className="row">
         <button className="btn" type="button" disabled={pending || !sel.length} onClick={() => run(() => relistLots(sel, auctionId), r => r.ok && setSel([]))}>Add {sel.length || ""} to this auction</button>
+      </div>
+      <Msg r={msg} />
+    </div>
+  );
+}
+
+/** Rehearsals only: puts every lot back to "not sold yet" (bids, prices, timers and invoices cleared). */
+export function RehearsalReset({ auctionId, number }: { auctionId: string; number: number }) {
+  const [typed, setTyped] = useState("");
+  const { pending, msg, run } = useAction();
+  return (
+    <div className="stack" style={{ gap: 8 }}>
+      <p className="fine">
+        Ran a test sale and want to run it again? This puts every lot in this auction back to its starting price:
+        all bids and max bids are deleted, timers cleared, and its invoices cancelled (paid test ones too).
+        <b> Never use it on a real auction.</b> Admins only.
+      </p>
+      <div className="inline-form">
+        <input value={typed} onChange={e => setTyped(e.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder={`Type ${number} to confirm`} aria-label="Auction number to confirm" />
+        <button className="btn danger" type="button" disabled={pending || typed !== String(number)} onClick={() => run(() => resetAuctionForRehearsal(auctionId, typed), r => r.ok && setTyped(""))}>
+          Reset all lots
+        </button>
       </div>
       <Msg r={msg} />
     </div>

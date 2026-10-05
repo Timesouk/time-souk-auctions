@@ -230,6 +230,44 @@ export async function relistLots(lotIds: string[], auctionId: string) {
   });
 }
 
+/**
+ * Rehearsals: puts every lot in an auction back to "not sold yet" so the same watches can be run again.
+ * Deletes all bids and max bids, clears prices and timers, and cancels the auction's invoices (paid test ones too).
+ * Admins only, and only after typing the auction number.
+ */
+export async function resetAuctionForRehearsal(auctionId: string, typed: string) {
+  return guard(async () => {
+    const me = await requireStaff();
+    if (me.role !== "admin") return bad("Only an admin can reset an auction.");
+    const db = adminClient();
+    const { data: auction } = await db.from("auctions").select("id, number").eq("id", auctionId).maybeSingle();
+    if (!auction) return bad("Auction not found.");
+    if (String(typed).trim() !== String(auction.number)) return bad(`Type ${auction.number} in the box to confirm.`);
+    const { data: lots } = await db.from("lots").select("id").eq("auction_id", auctionId);
+    const ids = (lots || []).map(l => l.id);
+    if (!ids.length) return bad("This auction has no lots.");
+    const now = new Date().toISOString();
+    const steps = [
+      await db.from("auctions").update({ block_lot_id: null }).eq("id", auctionId),
+      await db.from("invoices").update({ status: "void", void_reason: "Rehearsal reset", updated_at: now }).in("lot_id", ids).neq("status", "void"),
+      await db.from("max_bids").delete().in("lot_id", ids),
+      await db.from("bids").delete().in("lot_id", ids),
+      await db.from("lots").update({
+        current_bid: null, leader_paddle: null, leader_via: null, bid_count: 0,
+        reserve_met: false, made_pure: false, ends_at: null, updated_at: now
+      }).in("id", ids),
+      await db.from("lot_private").update({ leader_id: null, leader_ig: null, updated_at: now }).in("lot_id", ids)
+    ];
+    const failed = steps.find(r => r.error);
+    if (failed?.error) return bad(`Reset stopped part-way: ${failed.error.message}. Press Reset again to finish.`);
+    await db.from("events").insert({ kind: "auction_reset", actor: me.id, data: { auction_id: auctionId, lots: ids.length } });
+    revalidatePath(`/admin/auctions/${auctionId}`);
+    revalidatePath("/admin/payments");
+    revalidatePath("/", "layout");
+    return ok(`Auction Nº ${auction.number} reset: ${ids.length} lots are back to their starting price, ready for another rehearsal.`);
+  });
+}
+
 export async function setLotPhotos(lotId: string, photos: string[]) {
   return guard(async () => {
     const clean = photos.filter(u => /^https:\/\//.test(u)).slice(0, 24);
