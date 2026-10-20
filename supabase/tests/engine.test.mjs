@@ -566,3 +566,49 @@ test("staff can read private lot data through row security", async () => {
     await db.query("select set_config('test.uid', '', false)");
   }
 });
+
+// ───────────── back office (0006) ─────────────
+
+test("back office: staff-only tables, bidders see nothing and nobody writes from the browser", async () => {
+  const c = await one("insert into customers (code, instagram, full_name) values ('B9001', 'test.buyer', 'Test Buyer') returning id");
+  await db.query("insert into ledger (kind, customer_id, invoice_no, method, amount) values ('Payment', $1, 'TS001-B9001', 'Cash', 500)", [c.id]);
+  for (const [uid, sees] of [[A.id, 0], [S.id, 1]]) {
+    await db.query("select set_config('test.uid', $1, false)", [uid]);
+    await db.exec("set role authenticated");
+    try {
+      assert.equal((await all("select id from customers where code = 'B9001'")).length, sees);
+      assert.equal((await all("select id from ledger where invoice_no = 'TS001-B9001'")).length, sees);
+      assert.equal((await all("select id from office_settings")).length, sees);
+      await expectError(db.query("insert into ledger (kind, method, amount) values ('Deposit', 'Cash', 1)"), "permission denied");
+      await expectError(db.query("update customers set full_name = 'x'"), "permission denied");
+    } finally {
+      await db.exec("reset role");
+      await db.query("select set_config('test.uid', '', false)");
+    }
+  }
+});
+
+test("back office: checks on amounts and kinds; workbook rows are matched, not doubled", async () => {
+  await expectError(db.query("insert into ledger (kind, method, amount) values ('Payment', 'Cash', 0)"), "new row for relation \"ledger\" violates check constraint");
+  await expectError(db.query("insert into ledger (kind, method, amount) values ('Gift', 'Cash', 5)"), "new row for relation \"ledger\" violates check constraint");
+  const up = "insert into ledger (import_ref, kind, method, amount) values ('wb:pay:7', 'Deposit', 'Cash', $1) on conflict (import_ref) do update set amount = excluded.amount";
+  await db.query(up, [100]);
+  await db.query(up, [150]);
+  const rows = await all("select amount from ledger where import_ref = 'wb:pay:7'");
+  assert.equal(rows.length, 1);
+  assert.equal(Number(rows[0].amount), 150);
+  const s = await one("select brand_name, fee_pct, hours_to_pay, card_fee_methods from office_settings where id = 1");
+  assert.equal(s.brand_name, "DXB Watch × The Time Souk");
+  assert.equal(Number(s.fee_pct), 7.5);
+  assert.deepEqual(s.card_fee_methods, ["Card link (Ziina)"]);
+  assert.equal((await one("select kind from sellers where code = 'TS'")).kind, "own");
+});
+
+test("back office: 0006 can be run again safely", async () => {
+  const sql = readFileSync(new URL("0006_back_office.sql", migrationsDir), "utf8");
+  await db.exec(sql.replace(/^notify pgrst.*$/m, ""));
+  await db.exec(sql.replace(/^notify pgrst.*$/m, ""));
+  assert.equal((await one("select count(*)::int n from office_settings")).n, 1);
+  assert.equal((await one("select count(*)::int n from sellers where code = 'TS'")).n, 1);
+  assert.equal((await one("select count(*)::int n from customers where code = 'B9001'")).n, 1);
+});

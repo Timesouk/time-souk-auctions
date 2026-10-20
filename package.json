@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "typecheck": "tsc --noEmit",
-    "test:db": "node --test supabase/tests/*.test.mjs"
+    "test:db": "node --test supabase/tests/*.test.mjs",
+    "test:office": "tsc -p tests/office/tsconfig.json && node --test tests/office/*.test.mjs"
   },
   "engines": {
     "node": "22.x"

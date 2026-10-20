@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "es2022",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["es2022", "dom"],
+    "strict": true,
+    "skipLibCheck": true,
+    "outDir": "../../.office-test",
+    "rootDir": "../../lib",
+    "types": ["node"]
+  },
+  "files": [
+    "../../lib/office/engine.ts",
+    "../../lib/office/messages.ts",
+    "../../lib/office/import.ts",
+    "../../lib/office/xlsx.ts",
+    "../../lib/office/sample.ts",
+    "../../lib/office/links.ts",
+    "../../lib/office/status.ts"
+  ]
+}
