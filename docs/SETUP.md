@@ -436,7 +436,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 **Once**
 
 1. Run `0007_accounting.sql` (Part 1.2).
-2. **Accounting → Chart & settings** (admin): rename the accounts to suit (e.g. *1020 Bank: Mashreq current account*); check which account each payment method lands in (bank transfer → bank, cash → cash on hand, Ziina card links → *Ziina to receive*, and so on) and which account sellers are paid from.
+2. **Accounting → Chart & settings** (admin): rename the accounts to suit (e.g. put your bank's name on *1020 Bank: current account*); check which account each payment method lands in (bank transfer → bank, cash → cash on hand, Ziina card links → *Ziina to receive*, and so on) and which account sellers are paid from.
 3. **Accounting → Money in & out → Opening balances** (admin): choose the day the books start (e.g. 1 October 2026) and type what the business had and owed that day: bank and cash balances, the cost of watches in stock, anything owed to suppliers or the owners, the owners' capital. **Balance it** puts the difference in *3050 Opening balances*. Don't add buyers' invoices or consignors here: they're already in the back office.
 
 **As things happen** (Money in & out)
