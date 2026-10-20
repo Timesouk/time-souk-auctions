@@ -126,3 +126,16 @@ fieldset.plain { border: 0; padding: 0; margin: 0; }
   .doc-page + .doc-page { break-before: page; }
   .doc + .doc { margin-top: 0; }
 }
+
+/* accounting reports */
+table.report td, table.report th { padding: 7px 10px; }
+table.report tr.grp td { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); background: var(--tint); padding-top: 10px; }
+table.report tr.sub-tot td { font-weight: 800; border-top: 1.5px solid var(--ink); }
+table.report tr.tot td { font-weight: 900; font-size: 15.5px; border-top: 2.5px solid var(--ink); background: var(--card); }
+table.report a { text-decoration: none; }
+table.report a:hover { text-decoration: underline; }
+table.journal tbody + tbody tr.first td { border-top: 2px solid var(--ink); }
+tr.voided td { color: var(--ink-2); text-decoration: line-through; }
+tr.voided td small.sub { text-decoration: none; }
+tr.ticked td { background: #eaf6ee; }
+@media print { .chips { display: none !important; } }

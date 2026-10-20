@@ -10,6 +10,7 @@ import { fetchAll } from "@/lib/office/load";
 import { DELIVERY_STATUSES, EXCEPTIONS, PAY_METHODS, type Customer } from "@/lib/office/types";
 import type { ImportPlan } from "@/lib/office/import";
 import type { Result } from "../actions";
+import { booksClosedUpTo, closedMessage } from "@/lib/office/lock";
 
 const ok = (message: string, id?: string): Result => ({ ok: true, message, id });
 const bad = (message: string): Result => ({ ok: false, message });
@@ -110,6 +111,18 @@ export async function saveLots(changes: LotChange[]) {
     const sellers = await fetchAll<{ id: string; code: string; name: string; kind: string }>(db, "sellers", "id, code, name, kind", "code");
     const notes: string[] = [];
     let saved = 0;
+    const lock = await booksClosedUpTo();
+    if (lock) {
+      const MONEY = ["winner", "hammer", "exception", "cost", "fee_pct", "fee_fixed", "seller", "seller_paid_on"];
+      const touched = changes.filter(c => Object.keys(c.fields || {}).some(k => MONEY.includes(k))).map(c => c.id);
+      if (touched.length) {
+        const { data: rows } = await db.from("lots").select("id, lot_number, auctions(number, sale_date)").in("id", touched);
+        for (const r of rows || []) {
+          const a = (Array.isArray(r.auctions) ? r.auctions[0] : r.auctions) as { number: number; sale_date: string } | null;
+          if (a && a.sale_date <= lock) return bad(`Lot ${a.number}-${String(r.lot_number).padStart(2, "0")}: ${closedMessage(lock)}`);
+        }
+      }
+    }
     for (const ch of changes) {
       const f = ch.fields || {};
       const pub: Record<string, unknown> = {};
@@ -375,6 +388,11 @@ export async function saveAdjustment(input: AdjustmentInput) {
       extra: amount(input.extra), extra_label: str(input.extra_label, 60), note: str(input.note, 300), updated_at: new Date().toISOString()
     };
     for (const k of ["delivery_fee", "discount", "extra"] as const) if ((row[k] ?? 0) < 0) return bad("Amounts can't be negative.");
+    const lock = await booksClosedUpTo();
+    if (lock) {
+      const { data: a } = await adminClient().from("auctions").select("sale_date").eq("number", Number(no.slice(2, no.indexOf("-")))).maybeSingle();
+      if (a && a.sale_date <= lock) return bad(closedMessage(lock));
+    }
     const { error } = await adminClient().from("invoice_adjustments").upsert(row, { onConflict: "invoice_no" });
     if (error) return bad(error.message);
     refresh();
@@ -398,6 +416,9 @@ export async function recordEntry(input: EntryInput) {
     if (!input.customer_id) return bad("Choose the buyer.");
     const method = str(input.method, 40);
     if (!method) return bad("Choose how it was paid.");
+    const lock = await booksClosedUpTo();
+    const when = ymd(input.entry_date) || new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
+    if (lock && when <= lock) return bad(closedMessage(lock));
     const db = adminClient();
     const { data, error } = await db
       .from("ledger")
@@ -419,6 +440,11 @@ export async function recordEntry(input: EntryInput) {
 export async function deleteEntry(id: string) {
   return guard(async () => {
     const db = adminClient();
+    const lock = await booksClosedUpTo();
+    if (lock) {
+      const { data: row } = await db.from("ledger").select("entry_date").eq("id", id).maybeSingle();
+      if (row && row.entry_date <= lock) return bad(closedMessage(lock));
+    }
     const { data: card } = await db.from("card_links").select("id").eq("ledger_id", id).maybeSingle();
     if (card) await db.from("card_links").update({ ledger_id: null, status: "paid (record removed)" }).eq("id", card.id);
     const { error } = await db.from("ledger").delete().eq("id", id);

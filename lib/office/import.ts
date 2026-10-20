@@ -494,7 +494,7 @@ export function planToData(plan: ImportPlan, base: OfficeSettings, now: number):
     serial: l.serial, box_papers: l.box_papers, intake_date: l.intake_date,
     winner_customer_id: l.winner_code && cid.has(`c:${l.winner_code}`) ? `c:${l.winner_code}` : null, winner_text: l.winner_text, hammer: l.hammer,
     underbidder: l.underbidder, underbid: l.underbid, exception: l.exception as OLot["exception"], delivery_status: l.delivery_status, dispatched_on: l.dispatched_on,
-    courier: l.courier, seller_paid_on: l.seller_paid_on, payout_ref: l.payout_ref, office_notes: l.office_notes, tray: l.tray, slip_printed_at: l.slip_printed_at
+    courier: l.courier, seller_paid_on: l.seller_paid_on, payout_ref: l.payout_ref, payout_account: "", office_notes: l.office_notes, tray: l.tray, slip_printed_at: l.slip_printed_at
   }));
   const ledger: LedgerEntry[] = plan.ledger.map((e, i) => ({
     id: e.import_ref, seq: i + 1, entry_date: e.entry_date, kind: e.kind, customer_id: e.customer_code ? `c:${e.customer_code}` : null, invoice_no: e.invoice_no,

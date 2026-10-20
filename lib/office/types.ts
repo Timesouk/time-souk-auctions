@@ -43,6 +43,16 @@ export type OfficeSettings = {
   seller_terms: string;
   intake_terms: string;
   slip_note: string;
+  /** Accounting: the account each payment method lands in ("Cash" → "1010"). */
+  acct_methods: Record<string, string>;
+  /** Accounting: the account sellers are paid from unless a payout says otherwise. */
+  acct_payout_default: string;
+  /** Accounting: books closed up to this date (yyyy-mm-dd), or null. */
+  acct_lock_date: string | null;
+};
+
+export const DEFAULT_ACCT_METHODS: Record<string, string> = {
+  "Bank transfer": "1020", Cash: "1010", "Card link (Ziina)": "1030", "Card (website)": "1030", Tabby: "1040", Tamara: "1050", "Cash on delivery": "1060", Other: "1900"
 };
 
 /** The defaults, as in the database (0006). */
@@ -53,7 +63,10 @@ export const DEFAULT_SETTINGS: OfficeSettings = {
   fee_pct: 7.5, fee_fixed: 0, fee_min: 0, vat_fee_pct: 0, vat_sales_pct: 0, hours_to_pay: 48, pay_clock: "21:00",
   uae_fee: 30, cod_fee: 10, card_fee_pct: 3, card_fee_methods: ["Card link (Ziina)"], cash_alert: 55000, remind_gap_hours: 12,
   lot_target: 100, wa_lang: "both", wa_mode: "app", link_mode: "ask", inv_note: "No buyer's premium: you pay the hammer price.",
-  inv_terms: "", seller_terms: "", intake_terms: "", slip_note: "Your invoice follows on WhatsApp. Thank you!"
+  inv_terms: "", seller_terms: "", intake_terms: "", slip_note: "Your invoice follows on WhatsApp. Thank you!",
+  acct_methods: { ...DEFAULT_ACCT_METHODS },
+  acct_payout_default: "1020",
+  acct_lock_date: null
 };
 
 export type OAuction = {
@@ -124,6 +137,8 @@ export type OLot = {
   courier: string;
   seller_paid_on: string | null;
   payout_ref: string;
+  /** The account the seller was paid from ("" = the default payout account). */
+  payout_account: string;
   office_notes: string;
   tray: number | null;
   slip_printed_at: string | null;
@@ -267,3 +282,16 @@ export type OfficeData = {
   /** "Now" in milliseconds, so every page computes against the same clock. */
   now: number;
 };
+
+// ───────────────────────────── accounting ─────────────────────────────
+
+export type AccountType = "asset" | "liability" | "equity" | "income" | "expense";
+export type Account = { code: string; name: string; type: AccountType; subtype: string; system: boolean; active: boolean; notes: string };
+export type ManualLine = { id: number; account_code: string; debit: number; credit: number; memo: string };
+export type ManualKind = "expense" | "income" | "purchase" | "transfer" | "owner" | "opening" | "journal";
+export type ManualEntry = {
+  id: string; entry_date: string; kind: ManualKind; memo: string; payee: string; reference: string; void: boolean; void_reason: string; created_at: string; lines: ManualLine[];
+};
+export type Cleared = { key: string; account_code: string; cleared_on: string; reconciliation_id: string | null };
+export type Reconciliation = { id: string; account_code: string; statement_date: string; statement_balance: number; cleared_balance: number; created_at: string };
+export type AcctData = { accounts: Account[]; entries: ManualEntry[]; cleared: Cleared[]; recons: Reconciliation[] };

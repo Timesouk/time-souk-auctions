@@ -6,7 +6,7 @@ import {
   type OfficeSettings, type OLot, type Seller, type SentLog
 } from "./types";
 
-export const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100;
+export const r2 = (n: number) => Math.round((Number(n) || 0) * 100) / 100 || 0;
 const n0 = (v: number | null | undefined) => Number(v) || 0;
 export const pad3 = (n: number) => String(n).padStart(3, "0");
 export const pad2 = (n: number) => String(n).padStart(2, "0");

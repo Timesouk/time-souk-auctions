@@ -3,9 +3,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { adminClient } from "../supabase/admin";
 import { IS_PREVIEW } from "../env";
 import { compute, type Office } from "./engine";
-import { sampleOffice } from "./sample";
+import { sampleAccounting, sampleOffice } from "./sample";
+import { buildJournal, type Journal } from "./accounting";
 import {
-  DEFAULT_SETTINGS,
+  DEFAULT_ACCT_METHODS, DEFAULT_SETTINGS,
+  type Account, type AcctData, type Cleared, type ManualEntry, type Reconciliation,
   type Adjustment, type CardLink, type Customer, type IntakeItem, type LedgerEntry, type MessageOverrides, type OAuction,
   type OfficeData, type OfficeSettings, type OLot, type Seller, type SentLog
 } from "./types";
@@ -32,6 +34,10 @@ export function toSettings(row: Record<string, unknown> | null | undefined): Off
     (s as Record<string, unknown>)[k] = Number((s as Record<string, unknown>)[k]) || 0;
   }
   s.pay_clock = hm(s.pay_clock) || "21:00";
+  const m = (row?.acct_methods && typeof row.acct_methods === "object" ? row.acct_methods : {}) as Record<string, string>;
+  s.acct_methods = { ...DEFAULT_ACCT_METHODS, ...m };
+  s.acct_payout_default = String(row?.acct_payout_default || "1020");
+  s.acct_lock_date = row?.acct_lock_date ? String(row.acct_lock_date).slice(0, 10) : null;
   return s;
 }
 
@@ -49,7 +55,7 @@ export function toLot(r: LotRow): OLot {
     intake_item_id: (p.intake_item_id as string) || null, serial: String(p.serial || ""), box_papers: String(p.box_papers || ""), intake_date: (p.intake_date as string) || null,
     winner_customer_id: (p.winner_customer_id as string) || null, winner_text: String(p.winner_text || ""), hammer: n(p.hammer), underbidder: String(p.underbidder || ""),
     underbid: n(p.underbid), exception: (p.exception as OLot["exception"]) || null, delivery_status: String(p.delivery_status || ""), dispatched_on: (p.dispatched_on as string) || null,
-    courier: String(p.courier || ""), seller_paid_on: (p.seller_paid_on as string) || null, payout_ref: String(p.payout_ref || ""), office_notes: String(p.office_notes || ""),
+    courier: String(p.courier || ""), seller_paid_on: (p.seller_paid_on as string) || null, payout_ref: String(p.payout_ref || ""), payout_account: String(p.payout_account || ""), office_notes: String(p.office_notes || ""),
     tray: n(p.tray), slip_printed_at: (p.slip_printed_at as string) || null
   };
 }
@@ -118,4 +124,39 @@ export function pickAuction(o: Office, a?: string) {
     if (hit) return hit;
   }
   return list.find(x => x.sale_date <= o.today) || list[0] || null;
+}
+
+/** The accounting records (chart, typed entries, reconciliations). */
+export async function loadAcctData(): Promise<AcctData> {
+  if (IS_PREVIEW) return sampleAccounting();
+  const db = adminClient();
+  const first = await db.from("acct_accounts").select("code").limit(1);
+  if (first.error) {
+    throw new Error(first.error.code === "42P01" ? "Accounting isn't set up yet: run supabase/migrations/0007_accounting.sql in the Supabase SQL Editor." : first.error.message);
+  }
+  const [accounts, entries, lines, cleared, recons] = await Promise.all([
+    fetchAll<Account>(db, "acct_accounts", "code, name, type, subtype, system, active, notes", "code"),
+    fetchAll<Omit<ManualEntry, "lines">>(db, "acct_entries", "id, entry_date, kind, memo, payee, reference, void, void_reason, created_at", "entry_date"),
+    fetchAll<{ id: number; entry_id: string; account_code: string; debit: number; credit: number; memo: string }>(db, "acct_lines", "id, entry_id, account_code, debit, credit, memo", "id"),
+    fetchAll<Cleared>(db, "acct_cleared", "key, account_code, cleared_on, reconciliation_id", "key"),
+    fetchAll<Reconciliation>(db, "acct_reconciliations", "id, account_code, statement_date, statement_balance, cleared_balance, created_at", "statement_date")
+  ]);
+  const byEntry = new Map<string, ManualEntry["lines"]>();
+  for (const l of lines) {
+    const arr = byEntry.get(l.entry_id) || [];
+    arr.push({ id: Number(l.id), account_code: l.account_code, debit: Number(l.debit), credit: Number(l.credit), memo: l.memo });
+    byEntry.set(l.entry_id, arr);
+  }
+  return {
+    accounts,
+    entries: entries.map(e => ({ ...e, lines: byEntry.get(e.id) || [] })),
+    cleared,
+    recons: recons.map(r => ({ ...r, statement_balance: Number(r.statement_balance), cleared_balance: Number(r.cleared_balance) }))
+  };
+}
+
+/** Everything the accounting pages need: the back office, its accounting records and the journal. */
+export async function loadAccounting(): Promise<{ o: Office; acct: AcctData; j: Journal }> {
+  const [o, acct] = await Promise.all([loadOffice(), loadAcctData()]);
+  return { o, acct, j: buildJournal(o, acct) };
 }

@@ -67,10 +67,11 @@ export function NewSeller() {
 export type PayoutLot = { id: string; key: string; watch: string; net: number; invoice: string; state: string };
 
 /** Tick the lots you've paid the seller for, then mark them paid. */
-export function PayoutForm({ lots }: { lots: PayoutLot[] }) {
+export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots: PayoutLot[]; accounts?: { code: string; name: string }[]; defaultAccount?: string }) {
   const [pick, setPick] = useState<string[]>(lots.filter(l => l.state === "Due to seller").map(l => l.id));
   const [date, setDate] = useState(today());
   const [ref, setRef] = useState("");
+  const [account, setAccount] = useState(defaultAccount);
   const { pending, msg, run } = useAction();
   const total = lots.filter(l => pick.includes(l.id)).reduce((t, l) => t + l.net, 0);
   if (!lots.length) return <p className="fine">Nothing owed to this seller.</p>;
@@ -97,7 +98,12 @@ export function PayoutForm({ lots }: { lots: PayoutLot[] }) {
         <label className="k">Paid on</label>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} />
         <input placeholder="Transfer reference" value={ref} onChange={e => setRef(e.target.value)} />
-        <button type="button" className="btn pri" disabled={pending || !pick.length} onClick={() => run(() => markSellerPaid({ lotIds: pick, date, ref }))}>
+        {accounts.length ? (
+          <select value={account} onChange={e => setAccount(e.target.value)} aria-label="Paid from">
+            {accounts.map(a => <option key={a.code} value={a.code}>Paid from {a.code} · {a.name}</option>)}
+          </select>
+        ) : null}
+        <button type="button" className="btn pri" disabled={pending || !pick.length} onClick={() => run(() => markSellerPaid({ lotIds: pick, date, ref, account: accounts.length ? account : undefined }))}>
           Mark {pick.length} paid · AED {total.toLocaleString("en-US", { maximumFractionDigits: 2 })}
         </button>
       </div>

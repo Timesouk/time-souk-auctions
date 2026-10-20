@@ -11,6 +11,7 @@ import { checkOpenCardLinks, makeCardLink } from "@/lib/office/cards";
 import { MESSAGE_KEYS } from "@/lib/office/messages";
 import { BOX_PAPERS, CONDITIONS, DEFAULT_SETTINGS, type IntakeItem } from "@/lib/office/types";
 import type { Result } from "../actions";
+import { booksClosedUpTo, closedMessage } from "@/lib/office/lock";
 
 const ok = (message: string, id?: string): Result => ({ ok: true, message, id });
 const bad = (message: string): Result => ({ ok: false, message });
@@ -87,12 +88,15 @@ export async function saveSeller(input: SellerInput) {
 }
 
 /** Marks sold lots as paid out to their seller. */
-export async function markSellerPaid(input: { lotIds: string[]; date: string; ref: string }) {
+export async function markSellerPaid(input: { lotIds: string[]; date: string; ref: string; account?: string }) {
   return guard(async () => {
     if (!input.lotIds?.length) return bad("Choose the lots paid.");
+    const date = ymd(input.date) || today();
+    const lock = await booksClosedUpTo();
+    if (lock && date <= lock) return bad(closedMessage(lock));
     const { error } = await adminClient()
       .from("lot_private")
-      .update({ seller_paid_on: ymd(input.date) || today(), payout_ref: str(input.ref, 80), updated_at: new Date().toISOString() })
+      .update({ seller_paid_on: date, payout_ref: str(input.ref, 80), ...(input.account ? { payout_account: str(input.account, 6) } : {}), updated_at: new Date().toISOString() })
       .in("lot_id", input.lotIds.slice(0, 500));
     if (error) return bad(error.message);
     refresh();

@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { loadOffice } from "@/lib/office/load";
+import { loadAcctData, loadOffice } from "@/lib/office/load";
+import { moneyAccounts } from "@/lib/office/acct-view";
 import { amt } from "@/lib/office/engine";
 import { dateText } from "@/lib/office/messages";
 import { Pill, SetupNeeded } from "@/components/office/bits";
@@ -19,6 +20,8 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
   const intake = o.intake.filter(i => i.seller_id === x.id);
   const receipts = [...new Set(intake.map(i => i.receipt_no))];
   const n = (v: number | null) => (v == null ? "" : String(v));
+  const acct = await loadAcctData().catch(() => null);
+  const payFrom = acct ? moneyAccounts(acct.accounts).map(a => ({ code: a.code, name: a.name })) : [];
   return (
     <div className="stack" style={{ gap: 18 }}>
       <div className="adm-head">
@@ -39,7 +42,7 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
       {x.kind !== "own" ? (
         <section className="panel-card">
           <span className="k">Payouts</span>
-          <PayoutForm lots={owing.map(l => ({ id: l.id, key: l.key, watch: `${l.brand} ${l.model}`.trim(), net: l.net, invoice: l.invoiceNo || "", state: l.payout }))} />
+          <PayoutForm lots={owing.map(l => ({ id: l.id, key: l.key, watch: `${l.brand} ${l.model}`.trim(), net: l.net, invoice: l.invoiceNo || "", state: l.payout }))} accounts={payFrom} defaultAccount={o.data.settings.acct_payout_default} />
         </section>
       ) : null}
       <section className="panel-card">

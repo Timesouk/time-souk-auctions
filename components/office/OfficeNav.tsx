@@ -7,6 +7,7 @@ const LINKS: [string, string][] = [
   ["/admin/office/lots", "Lots"],
   ["/admin/office/invoices", "Invoices"],
   ["/admin/office/payments", "Payments"],
+  ["/admin/office/accounting", "Accounting"],
   ["/admin/office/buyers", "Buyers"],
   ["/admin/office/sellers", "Sellers"],
   ["/admin/office/intake", "Intake"],

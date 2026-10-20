@@ -612,3 +612,66 @@ test("back office: 0006 can be run again safely", async () => {
   assert.equal((await one("select count(*)::int n from sellers where code = 'TS'")).n, 1);
   assert.equal((await one("select count(*)::int n from customers where code = 'B9001'")).n, 1);
 });
+
+// ───────────── accounting (0007) ─────────────
+
+const post = (entry, lines) => one("select acct_post($1::jsonb, $2::jsonb) as id", [JSON.stringify(entry), JSON.stringify(lines)]).then(r => r.id);
+
+test("accounting: balanced entries only, from known accounts", async () => {
+  const id = await post({ entry_date: "2026-10-20", kind: "expense", memo: "Courier", payee: "Aramex" }, [
+    { account_code: "6010", debit: 95.24 },
+    { account_code: "1300", debit: 4.76 },
+    { account_code: "1020", credit: 100 }
+  ]);
+  const lines = await all("select account_code, debit::float, credit::float from acct_lines where entry_id = $1 order by id", [id]);
+  assert.equal(lines.length, 3);
+  assert.equal((await one("select kind from acct_entries where id = $1", [id])).kind, "expense");
+  await expectError(post({ entry_date: "2026-10-20" }, [{ account_code: "6010", debit: 10 }, { account_code: "1020", credit: 9 }]), "acct: debits");
+  await expectError(post({ entry_date: "2026-10-20" }, [{ account_code: "6010", debit: 10 }]), "acct: an entry needs");
+  await expectError(post({ entry_date: "2026-10-20" }, [{ account_code: "9999", debit: 10 }, { account_code: "1020", credit: 10 }]), "acct: account 9999");
+  await expectError(post({ entry_date: "2026-10-20" }, [{ account_code: "6010", debit: 10, credit: 10 }, { account_code: "1020", credit: 10 }]), "acct: each line");
+  await expectError(post({ entry_date: "2026-10-20", kind: "gift" }, [{ account_code: "6010", debit: 10 }, { account_code: "1020", credit: 10 }]), "new row for relation \"acct_entries\" violates check constraint");
+  // nothing half-saved from the failures
+  assert.equal((await one("select count(*)::int n from acct_entries")).n, 1);
+});
+
+test("accounting: closed books refuse new and voided entries on or before the date", async () => {
+  const id = await post({ entry_date: "2026-09-30" }, [{ account_code: "3100", debit: 500 }, { account_code: "1010", credit: 500 }]);
+  await db.query("update office_settings set acct_lock_date = '2026-09-30' where id = 1");
+  try {
+    await expectError(post({ entry_date: "2026-09-30" }, [{ account_code: "6010", debit: 1 }, { account_code: "1020", credit: 1 }]), "acct: the books are closed");
+    await expectError(db.query("select acct_void($1, 'x')", [id]), "acct: the books are closed");
+    await post({ entry_date: "2026-10-01" }, [{ account_code: "6010", debit: 1 }, { account_code: "1020", credit: 1 }]);
+  } finally {
+    await db.query("update office_settings set acct_lock_date = null where id = 1");
+  }
+  await db.query("select acct_void($1, 'typed twice')", [id]);
+  assert.equal((await one("select void from acct_entries where id = $1", [id])).void, true);
+});
+
+test("accounting: staff read, bidders see nothing, nobody posts from the browser", async () => {
+  for (const [uid, sees] of [[A.id, 0], [S.id, 1]]) {
+    await db.query("select set_config('test.uid', $1, false)", [uid]);
+    await db.exec("set role authenticated");
+    try {
+      assert.equal((await all("select code from acct_accounts where code = '1020'")).length, sees);
+      assert.equal((await all("select id from acct_entries limit 1")).length, sees);
+      await expectError(post({ entry_date: "2026-10-21" }, [{ account_code: "6010", debit: 1 }, { account_code: "1020", credit: 1 }]), "permission denied");
+      await expectError(db.query("insert into acct_accounts (code, name, type) values ('7777', 'x', 'expense')"), "permission denied");
+    } finally {
+      await db.exec("reset role");
+      await db.query("select set_config('test.uid', '', false)");
+    }
+  }
+  const s = await one("select acct_methods->>'Cash' cash, acct_payout_default from office_settings where id = 1");
+  assert.equal(s.cash, "1010");
+  assert.equal(s.acct_payout_default, "1020");
+});
+
+test("accounting: 0007 can be run again safely", async () => {
+  const sql = readFileSync(new URL("0007_accounting.sql", migrationsDir), "utf8").replace(/^notify pgrst.*$/m, "");
+  await db.exec(sql);
+  await db.exec(sql);
+  assert.equal((await one("select count(*)::int n from acct_accounts where code = '1100'")).n, 1);
+  assert.ok((await one("select count(*)::int n from acct_entries")).n >= 2);
+});

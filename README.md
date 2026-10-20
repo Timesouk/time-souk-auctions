@@ -34,8 +34,8 @@ public/brand/          the logo (site, emails); app/icon.png and the link-previe
 app/api/               phone codes, payments, provider webhooks, cron, uploads, CSV export
 components/            site, live bidding and admin components
 lib/                   formatting, auction rules, i18n (EN/AR), Supabase clients, invoices, notifications, payment providers
-lib/office/            the back office: invoice and fee rules, WhatsApp wording (EN/AR), workbook import
-supabase/migrations/   the database: tables, security rules and bidding engine (run 0001 to 0006 in order)
+lib/office/            the back office: invoice and fee rules, double-entry accounting, WhatsApp wording (EN/AR), workbook import
+supabase/migrations/   the database: tables, security rules and bidding engine (run 0001 to 0007 in order)
 supabase/tests/        bidding-engine and back-office database tests on an in-memory Postgres
 tests/office/          back-office rules, messages and import tests (npm run test:office)
 docs/SETUP.md          deployment and run-of-show guide

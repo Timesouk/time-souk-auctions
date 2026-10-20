@@ -1,4 +1,5 @@
 // Made-up records for preview mode (no Supabase): every name, number and handle here is fictional.
+import { DEFAULT_CHART } from "./chart";
 import { DEFAULT_SETTINGS, type Customer, type IntakeItem, type LedgerEntry, type OAuction, type OfficeData, type OLot, type Seller } from "./types";
 
 const day = (now: number, offset: number) => new Date(now + 4 * 3600e3 + offset * 86400e3).toISOString().slice(0, 10);
@@ -45,7 +46,7 @@ export function sampleOffice(now = Date.now()): OfficeData {
     leader_id: null, leader_ig: null, reserve: w[5], cost: w[3] === "sTS" ? Math.round(w[4] * 0.8) : null, seller_fee: null, fee_fixed: null, seller_id: w[3], intake_item_id: null,
     serial: "", box_papers: w[6], intake_date: null, winner_customer_id: played ? w[7] : null, winner_text: played && w[7] ? customers.find(c => c.id === w[7])!.instagram! : "",
     hammer: played ? w[8] : null, underbidder: "", underbid: null, exception: null, delivery_status: "", dispatched_on: null, courier: "", seller_paid_on: null,
-    payout_ref: "", office_notes: "", tray: null, slip_printed_at: null
+    payout_ref: "", payout_account: "", office_notes: "", tray: null, slip_printed_at: null
   });
   watches.forEach((w, i) => lots.push(mk(auctions[0], i, w, true)));
   watches.slice(0, 5).forEach((w, i) => lots.push(mk(auctions[1], i, w, false)));
@@ -68,5 +69,25 @@ export function sampleOffice(now = Date.now()): OfficeData {
     ledger,
     sent: [{ id: 1, sent_at: at(past), ref: "TS001-B0002", name: "Layla Example", phone: "+971500000102", total: 11030, balance: 11030, file: "", kind: "Invoice", link: "" }],
     cards: [], messages: {}, now
+  };
+}
+
+/** Made-up accounting entries for preview mode: opening balances, an expense, a Ziina payout, owners' drawings. */
+export function sampleAccounting(now = Date.now()): import("./types").AcctData {
+  const d = (offset: number) => new Date(now + 4 * 3600e3 + offset * 86400e3).toISOString().slice(0, 10);
+  const e = (id: string, entry_date: string, kind: import("./types").ManualKind, memo: string, payee: string, lines: [string, number, number][]) => ({
+    id, entry_date, kind, memo, payee, reference: "", void: false, void_reason: "", created_at: `${entry_date}T10:00:00+04:00`,
+    lines: lines.map(([account_code, debit, credit], i) => ({ id: Number(id.replace(/\D/g, "")) * 10 + i, account_code, debit, credit, memo: "" }))
+  });
+  return {
+    accounts: DEFAULT_CHART,
+    entries: [
+      e("s1", d(-40), "opening", "Opening balances", "", [["1020", 60000, 0], ["1010", 3000, 0], ["1200", 45000, 0], ["3050", 0, 108000]]),
+      e("s2", d(-5), "expense", "Instagram ads", "Meta", [["6100", 700, 0], ["1020", 0, 700]]),
+      e("s3", d(-2), "transfer", "Ziina payout", "Ziina", [["1020", 9200, 0], ["6020", 276, 0], ["1030", 0, 9476]]),
+      e("s4", d(-1), "expense", "Courier for auction 1", "Courier", [["6010", 150, 0], ["1010", 0, 150]])
+    ],
+    cleared: [],
+    recons: []
   };
 }

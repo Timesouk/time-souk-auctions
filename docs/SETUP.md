@@ -46,9 +46,10 @@ These involve approvals by other companies. Start them now and carry on with the
    Then `supabase/migrations/0004_cod_uae_only.sql` (cash on delivery for UAE deliveries only). Run it **after** 0003.
    Then `supabase/migrations/0005_optional_estimates_zero_start.sql` (optional estimates, AED 0 starting bids, staff logins, one admin). Run it **after** 0004.
    Then `supabase/migrations/0006_back_office.sql` (the back office: buyers, sellers, intake, consolidated invoices, payments, card links). Run it **after** 0005.
+   Then `supabase/migrations/0007_accounting.sql` (accounting: chart of accounts, entries, reconciliation, closing the books). Run it **after** 0006.
 4. Check **Table Editor**: you should see tables such as `auctions`, `lots`, `bids`, `invoices`, `profiles`.
 
-> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0006 are safe to run again.
+> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0007 are safe to run again.
 
 ### 1.3 Copy the API keys into Vercel later
 You'll need these three values in Part 3. Find them in **Project Settings → API Keys** (and **Project Settings → Data API** for the URL):
@@ -379,7 +380,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | Problem | Fix |
 |---|---|
 | Site still shows sample watches | Supabase variables missing, or you didn't redeploy after adding them. |
-| Site shows an error after connecting Supabase | Check all six database files ran, in order: `0001` to `0006` (Part 1.2). |
+| Site shows an error after connecting Supabase | Check all seven database files ran, in order: `0001` to `0007` (Part 1.2). |
 | Can't change the timer on a lot | Its timer is running. Sudden death: stop it, or let it end and Reopen. |
 | No email code | Check Resend → **Logs**. Check Supabase SMTP settings (Part 2.3), and that the templates contain `{{ .Token }}`. Look in spam. |
 | Email code says "invalid" | Codes expire after 10 minutes and only the newest code works. Ask for a new one. |
@@ -427,6 +428,39 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | Packing and delivery | **Lots → After the sale**, **Dispatch** | Delivery status, tray, courier and AWB; print the dispatch list for the courier to sign. |
 | Paying sellers | **Sellers →** the seller | Tick the lots paid for by their buyers, **Mark paid**. Then **Statements** for the seller's statement. |
 | Returns and refunds | **Lots** (Exception: Returned by buyer / Withdrawn / Buyer defaulted), **Payments → Refunds to make** | The lot leaves the invoice; the money to give back is listed. **Refund** records it and offers the WhatsApp message. |
+
+### 13.3 Accounting
+
+**Back office → Accounting** keeps double-entry books. Sales, seller fees, the cost of own-stock watches sold, payments, deposits, refunds and seller payouts are booked **automatically** from the back office: nothing is typed twice. Only what the back office can't see is entered by hand, under **Money in & out**.
+
+**Once**
+
+1. Run `0007_accounting.sql` (Part 1.2).
+2. **Accounting → Chart & settings** (admin): rename the accounts to suit (e.g. *1020 Bank: Mashreq current account*); check which account each payment method lands in (bank transfer → bank, cash → cash on hand, Ziina card links → *Ziina to receive*, and so on) and which account sellers are paid from.
+3. **Accounting → Money in & out → Opening balances** (admin): choose the day the books start (e.g. 1 October 2026) and type what the business had and owed that day: bank and cash balances, the cost of watches in stock, anything owed to suppliers or the owners, the owners' capital. **Balance it** puts the difference in *3050 Opening balances*. Don't add buyers' invoices or consignors here: they're already in the back office.
+
+**As things happen** (Money in & out)
+
+| Happened | Tab | Example |
+|---|---|---|
+| A bill paid | **Expense** | Instagram ads, courier, rent, salaries. Category, amount, paid from; "5% VAT included" splits out the VAT if you're VAT-registered. |
+| A watch bought for own stock | **Stock bought** | It goes into *Watches in stock* at cost. Also type the cost on its lot (Lots › Lot details) so the profit is right when it sells. |
+| Ziina, Tabby or Tamara pays out | **Transfer** | From *Ziina to receive* to the bank: amount sent, fee deducted (→ *Payment processing fees*). |
+| Cash banked, the courier hands over COD cash | **Transfer** | From *Cash on hand* / *Cash on delivery with the courier* to the bank. |
+| An owner puts money in or takes it out | **Owners' money** (admin) | Capital, drawings, loans. |
+| Anything else, or a correction | **Journal entry** (admin) | Any balanced lines. A wrong entry is **voided** (it stays on record, struck out) and entered again. |
+
+When paying a seller (**Sellers →** the seller → **Mark paid**), choose the account it was paid from.
+
+**Every month**
+
+1. **Reconcile** each bank, cash and payment-provider account: open the statement, tick each line that's on it until the *ticked balance* equals the statement's closing balance, then **Finish reconciliation**. Lines on the statement but not in the books (bank charges, payout fees) are recorded first under Money in & out.
+2. Check **Overview → Worth a look**: own-stock lots sold without a cost, overseas invoices without a delivery fee, anything in *Suspense*.
+3. Read the **Profit & loss** (month by month), **Balance sheet** and **Who owes what**.
+4. **Chart & settings → Books closed up to** (admin): set it to the month's last day. Nothing dated on or before then can change any more (payments, results, payouts, entries). Clear it to reopen.
+5. Send your accountant **Trial balance → Download the journal (CSV)**, and the **VAT** page each quarter if you're VAT-registered.
+
+> Consigned watches are not income: only the seller fee is (the hammer price is money held for the seller, in *Owed to consignors*). Own-stock watches count their hammer price as sales and their cost as cost of sales. Have your accountant review the chart and the VAT treatment (pre-owned watches can sometimes use the profit-margin scheme, and exports can be zero-rated; neither is applied automatically).
 
 **Summary** shows every auction side by side (sales, profit, billed, collected, outstanding, owed to sellers). **Sent log** lists every WhatsApp message opened from the back office. **Settings → WhatsApp wording** lets you change any message in English and Arabic.
 
