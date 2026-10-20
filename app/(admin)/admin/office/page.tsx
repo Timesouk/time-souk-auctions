@@ -24,11 +24,14 @@ export default async function OfficeHome({ searchParams }: { searchParams: Promi
         { n: invs.filter(i => !i.sentAt).length, text: "invoices not sent yet", href: `/admin/office/invoices${q}&show=unsent` },
         { n: invs.filter(i => i.feeMissing).length, text: "overseas invoices need a delivery fee", href: `/admin/office/invoices${q}&show=fee`, warn: true },
         { n: invs.filter(i => /^Ready/.test(i.nextStep)).length, text: "orders paid and ready to ship or collect", href: `/admin/office/invoices${q}&show=ready` },
-        { n: lots.filter(l => l.reserveCheck === "Below reserve").length, text: "lots sold below their reserve", href: `/admin/office/lots${q}` }
+        { n: lots.filter(l => l.reserveCheck === "Below reserve").length, text: "lots sold below their reserve", href: `/admin/office/lots${q}` },
+        { n: lots.filter(l => (l.sold || l.status === "Sold – add buyer") && !l.slip_printed_at).length, text: "sold slips not printed", href: `/admin/office/slips${q}` }
       ]
     : [];
   const overdue = o.owing.filter(i => (i.hoursOverdue || 0) > 0);
   const checks = o.ledger.filter(e => e.check);
+  const dueSellers = o.lots.filter(l => l.payout === "Due to seller");
+  const inStock = o.intake.filter(i => i.status === "In stock" || /: in stock$/.test(i.status)).length;
   const target = sum?.target || o.data.settings.lot_target || 100;
   return (
     <div className="stack" style={{ gap: 20 }}>
@@ -109,6 +112,16 @@ export default async function OfficeHome({ searchParams }: { searchParams: Promi
           <li>
             <Link href="/admin/office/payments#refunds">
               <b className={o.refunds.length ? "warn-ink" : undefined}>{o.refunds.length}</b> {o.refunds.length === 1 ? "refund" : "refunds"} to make · {aed(o.refunds.reduce((t, r) => t + r.amount, 0))}
+            </Link>
+          </li>
+          <li>
+            <Link href="/admin/office/sellers">
+              <b>{dueSellers.length}</b> {dueSellers.length === 1 ? "lot is" : "lots are"} paid for and due to their seller · {aed(dueSellers.reduce((t, l) => t + l.net, 0))}
+            </Link>
+          </li>
+          <li>
+            <Link href="/admin/office/intake">
+              <b>{inStock}</b> consigned {inStock === 1 ? "watch is" : "watches are"} in stock, waiting for an auction
             </Link>
           </li>
           <li>

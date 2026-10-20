@@ -7,6 +7,9 @@ import { Pill, SetupNeeded } from "@/components/office/bits";
 import { InvoiceDoc } from "@/components/office/InvoiceDoc";
 import { WaButton } from "@/components/office/Wa";
 import { AdjustmentForm, CopyButton, DeleteEntry, EntryForm, PrintButton } from "@/components/office/forms";
+import { CardLinkButton, PastedLink } from "@/components/office/forms2";
+import { ziinaReady } from "@/lib/payments/ziina";
+import { openCardLink } from "@/lib/office/view";
 import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
 
@@ -67,6 +70,21 @@ export default async function OfficeInvoice({ params }: { params: Promise<{ no: 
       <div className="inv-layout">
         <InvoiceDoc inv={inv} s={s} />
         <aside className="stack no-print" style={{ gap: 14 }}>
+          {inv.balance > 0.005 && inv.paysBy !== COD ? (
+            <div className="panel-card">
+              <span className="k">Card payment link · AED {amt(inv.cardAmount)} incl. {s.card_fee_pct}% fee</span>
+              {openCardLink(o, inv) ? <p className="fine">A link for this amount is already open; it&apos;s included in the invoice and reminder messages.</p> : null}
+              {ziinaReady() ? (
+                <CardLinkButton kind="Invoice" invoiceNo={inv.no} amount={inv.balance} phone={c.phone} name={c.full_name} code={m.code} lots={inv.lots.map(l => l.key).join(", ")}
+                  watch="" nLots={inv.lots.length} due={inv.due} settings={s} overrides={o.data.messages} label="Make a card link" className="btn" />
+              ) : (
+                <>
+                  <p className="fine">Ziina isn&apos;t connected to the website yet (ZIINA_API_KEY in Vercel). Make the link in the Ziina app and paste it here so it goes in the messages.</p>
+                  <PastedLink invoiceNo={inv.no} cardAmount={inv.cardAmount} />
+                </>
+              )}
+            </div>
+          ) : null}
           {inv.balance > 0.005 ? (
             <div className="panel-card">
               <EntryForm kind="Payment" title={`Record payment · balance AED ${amt(inv.balance)}`} customerId={c.id} invoiceNo={inv.no} amount={inv.balance} method={inv.paysBy} lockBuyer confirm={confirm} />

@@ -29,13 +29,15 @@ The weekly live watch auction for **The Time Souk**, Dubai: a bilingual (English
 
 ```
 app/(site)/[locale]/   public site in /en and /ar (home, catalogue, lot pages, live, register, account, pay, results, sell, terms, privacy)
-app/(admin)/admin/     staff admin (live console, auctions, lots, bidders, payments, consignments, settings)
+app/(admin)/admin/     staff admin (live console, back office, auctions, lots, bidders, payments, consignments, settings)
 public/brand/          the logo (site, emails); app/icon.png and the link-preview image are made from it
 app/api/               phone codes, payments, provider webhooks, cron, uploads, CSV export
 components/            site, live bidding and admin components
 lib/                   formatting, auction rules, i18n (EN/AR), Supabase clients, invoices, notifications, payment providers
-supabase/migrations/   the database: tables, security rules and bidding engine (run 0001 to 0005 in order)
-supabase/tests/        bidding-engine tests on an in-memory Postgres
+lib/office/            the back office: invoice and fee rules, WhatsApp wording (EN/AR), workbook import
+supabase/migrations/   the database: tables, security rules and bidding engine (run 0001 to 0006 in order)
+supabase/tests/        bidding-engine and back-office database tests on an in-memory Postgres
+tests/office/          back-office rules, messages and import tests (npm run test:office)
 docs/SETUP.md          deployment and run-of-show guide
 ```
 

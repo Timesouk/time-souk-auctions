@@ -1,0 +1,57 @@
+import Link from "next/link";
+import { loadOffice } from "@/lib/office/load";
+import { aed, amt } from "@/lib/office/engine";
+import { pctText } from "@/lib/office/messages";
+import { SetupNeeded } from "@/components/office/bits";
+import { NewSeller } from "@/components/office/forms2";
+
+export const dynamic = "force-dynamic";
+
+export default async function OfficeSellers() {
+  const o = await loadOffice().catch((e: Error) => e);
+  if (o instanceof Error) return <SetupNeeded error={o.message} />;
+  const s = o.data.settings;
+  const list = o.sellers.slice().sort((a, b) => (a.kind === b.kind ? a.code.localeCompare(b.code) : a.kind === "own" ? -1 : 1));
+  const owed = o.sellers.reduce((t, x) => t + Math.max(0, x.owed), 0);
+  return (
+    <div className="stack" style={{ gap: 16 }}>
+      <div className="adm-head">
+        <div>
+          <h1 className="disp">Sellers</h1>
+          <p className="fine">Consignors and your own stock (TS). Default fee: {pctText(s.fee_pct / 100)}{s.fee_fixed ? ` + AED ${amt(s.fee_fixed)} per sold lot` : ""}. Still owed to sellers: {aed(owed)}.</p>
+        </div>
+        <div className="row">
+          <Link className="btn sm" href="/admin/office/intake">Intake</Link>
+          <Link className="btn sm" href="/admin/office/statements">Statements</Link>
+        </div>
+      </div>
+      <NewSeller />
+      <div className="tbl-wrap">
+        <table>
+          <thead>
+            <tr><th>ID</th><th>Name</th><th>Type</th><th>WhatsApp</th><th>Fee</th><th className="n">Lots</th><th className="n">Sold</th><th className="n">Hammer</th><th className="n">Fees</th><th className="n">Net to seller</th><th className="n">Paid out</th><th className="n">Still owed</th><th className="n">Our profit</th></tr>
+          </thead>
+          <tbody>
+            {list.map(x => (
+              <tr key={x.id}>
+                <td className="mono"><Link href={`/admin/office/sellers/${x.code}`}>{x.code}</Link></td>
+                <td>{x.name}</td>
+                <td>{x.kind === "own" ? "Own stock" : "Consignment"}</td>
+                <td className="mono nowrap">{x.phone}</td>
+                <td className="nowrap">{x.kind === "own" ? "" : `${pctText((x.fee_pct ?? s.fee_pct) / 100)}${(x.fee_fixed ?? s.fee_fixed) ? ` + ${amt(x.fee_fixed ?? s.fee_fixed)}` : ""}`}</td>
+                <td className="n">{x.lotsEntered}</td>
+                <td className="n">{x.lotsSold}</td>
+                <td className="n">{amt(x.hammer)}</td>
+                <td className="n">{amt(x.fees)}</td>
+                <td className="n">{amt(x.net)}</td>
+                <td className="n">{amt(x.paidOut)}</td>
+                <td className="n">{x.owed > 0.005 ? <b>{amt(x.owed)}</b> : "0"}</td>
+                <td className="n">{amt(x.profit)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}

@@ -518,39 +518,38 @@ export async function importWorkbook(plan: ImportPlan) {
       const { data } = await db.from("lots").select("id, lot_number").eq("auction_id", id);
       for (const l of data || []) lotIds.set(`${num}-${l.lot_number}`, l.id);
     }
-    let newLots = 0;
-    for (const l of plan.lots) {
-      const aid = auctionId.get(l.auction_number);
-      if (!aid) continue;
-      const k = `${l.auction_number}-${l.lot_number}`;
-      let id = lotIds.get(k);
-      if (!id) {
-        const { data, error } = await db
-          .from("lots")
-          .insert({
-            auction_id: aid, lot_number: l.lot_number, brand: l.brand, model: l.model, reference: l.reference, year: l.year, condition: l.condition || "Excellent",
-            start_price: l.start_price, has_box: /box|full/i.test(l.box_papers), has_papers: /papers|full/i.test(l.box_papers), no_reserve: !l.reserve
-          })
-          .select("id")
-          .single();
-        fail(`Lot ${k}`, error);
-        id = data!.id as string;
-        lotIds.set(k, id);
-        newLots++;
-      }
+    const wanted = plan.lots.filter(l => auctionId.has(l.auction_number));
+    const fresh = wanted.filter(l => !lotIds.has(`${l.auction_number}-${l.lot_number}`));
+    for (let i = 0; i < fresh.length; i += 200) {
+      const { data, error } = await db
+        .from("lots")
+        .insert(
+          fresh.slice(i, i + 200).map(l => ({
+            auction_id: auctionId.get(l.auction_number)!, lot_number: l.lot_number, brand: l.brand, model: l.model, reference: l.reference, year: l.year,
+            condition: l.condition || "Excellent", start_price: l.start_price, has_box: /box|full/i.test(l.box_papers), has_papers: /papers|full/i.test(l.box_papers), no_reserve: !l.reserve
+          }))
+        )
+        .select("id, auction_id, lot_number");
+      fail("Lots", error);
+      const numOf = new Map([...auctionId].map(([n, id]) => [id, n]));
+      for (const r of data || []) lotIds.set(`${numOf.get(r.auction_id as string)}-${r.lot_number}`, r.id as string);
+    }
+    const newLots = fresh.length;
+    const privRows = wanted.map(l => {
       const s = l.seller_code ? sellerKind.get(l.seller_code) : undefined;
-      const { error } = await db.from("lot_private").upsert(
-        {
-          lot_id: id, reserve: l.reserve && l.reserve > 0 ? Math.round(l.reserve) : null, cost: l.cost == null ? null : Math.round(l.cost), seller_fee: l.fee_pct, fee_fixed: l.fee_fixed,
-          seller_id: l.seller_code ? sellerId.get(l.seller_code) || null : null, source: s && s.kind !== "own" ? "consign" : "stock", consignor_name: s && s.kind !== "own" ? s.name : "",
-          intake_item_id: l.intake_item ? intakeId.get(l.intake_item) || null : null, serial: l.serial, box_papers: l.box_papers, intake_date: l.intake_date,
-          winner_customer_id: l.winner_code ? custId.get(l.winner_code) || null : null, winner_text: l.winner_text, hammer: l.hammer, underbidder: l.underbidder, underbid: l.underbid,
-          exception: l.exception, delivery_status: l.delivery_status, dispatched_on: l.dispatched_on, courier: l.courier, seller_paid_on: l.seller_paid_on, payout_ref: l.payout_ref,
-          office_notes: l.office_notes, tray: l.tray == null ? null : Math.round(l.tray), slip_printed_at: l.slip_printed_at, updated_at: new Date().toISOString()
-        },
-        { onConflict: "lot_id" }
-      );
-      fail(`Lot ${k}`, error);
+      return {
+        lot_id: lotIds.get(`${l.auction_number}-${l.lot_number}`)!, reserve: l.reserve && l.reserve > 0 ? Math.round(l.reserve) : null, cost: l.cost == null ? null : Math.round(l.cost),
+        seller_fee: l.fee_pct, fee_fixed: l.fee_fixed, seller_id: l.seller_code ? sellerId.get(l.seller_code) || null : null, source: s && s.kind !== "own" ? "consign" : "stock",
+        consignor_name: s && s.kind !== "own" ? s.name : "", intake_item_id: l.intake_item ? intakeId.get(l.intake_item) || null : null, serial: l.serial, box_papers: l.box_papers,
+        intake_date: l.intake_date, winner_customer_id: l.winner_code ? custId.get(l.winner_code) || null : null, winner_text: l.winner_text, hammer: l.hammer,
+        underbidder: l.underbidder, underbid: l.underbid, exception: l.exception, delivery_status: l.delivery_status, dispatched_on: l.dispatched_on, courier: l.courier,
+        seller_paid_on: l.seller_paid_on, payout_ref: l.payout_ref, office_notes: l.office_notes, tray: l.tray == null ? null : Math.round(l.tray), slip_printed_at: l.slip_printed_at,
+        updated_at: new Date().toISOString()
+      };
+    });
+    for (let i = 0; i < privRows.length; i += 200) {
+      const { error } = await db.from("lot_private").upsert(privRows.slice(i, i + 200), { onConflict: "lot_id" });
+      fail("Lots (office details)", error);
     }
 
     // invoices: adjustments, payments, what was sent, card links
@@ -559,7 +558,7 @@ export async function importWorkbook(plan: ImportPlan) {
       fail("Adjustments", error);
     }
     if (plan.ledger.length) {
-      const rows = plan.ledger.map(({ customer_code, ...e }) => ({ ...e, customer_id: customer_code ? custId.get(customer_code) || null : null, entry_date: e.entry_date || undefined }));
+      const rows = plan.ledger.map(({ customer_code, ...e }) => ({ ...e, customer_id: customer_code ? custId.get(customer_code) || null : null, entry_date: e.entry_date || new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10) }));
       const { error } = await db.from("ledger").upsert(rows, { onConflict: "import_ref" });
       fail("Payments", error);
     }

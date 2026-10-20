@@ -19,6 +19,8 @@ export type GridRow = {
   info: Record<string, string>;
   wa?: { phone: string; text: string; ref: string; name: string; total: number | null } | null;
   href?: string;
+  /** link to this lot's sold slip */
+  slip?: string;
 };
 
 export function LotsGrid({
@@ -164,6 +166,7 @@ export function LotsGrid({
                     </td>
                   ))}
                   <td className="nowrap">
+                    {r.slip && !edits[r.id] ? <a className="btn sm" href={r.slip} style={{ marginInlineEnd: 4 }}>Slip</a> : null}
                     {r.wa && !edits[r.id] ? (
                       <WaButton label="WhatsApp" phone={r.wa.phone} text={r.wa.text} mode={waMode} log={{ ref: r.wa.ref, name: r.wa.name, total: r.wa.total, balance: r.wa.total, kind: `Won lot ${r.key}`, link: "" }} />
                     ) : null}

@@ -1,6 +1,7 @@
 import { ziinaVerify } from "@/lib/payments/ziina";
 import { paymentByRef, settlePayment } from "@/lib/payments/settle";
 import { json } from "@/lib/http";
+import { settleCardLinkByZiinaId } from "@/lib/office/cards";
 
 export async function POST(req: Request) {
   const raw = await req.text();
@@ -9,6 +10,8 @@ export async function POST(req: Request) {
   if (body.event === "payment_intent.status.updated" && body.data?.id) {
     const p = await paymentByRef("ziina", body.data.id);
     if (p) await settlePayment(p).catch(() => null);
+    // Not a website payment: maybe a back-office card link (invoice, lot or deposit).
+    else await settleCardLinkByZiinaId(body.data.id).catch(() => null);
   }
   return json({ ok: true });
 }

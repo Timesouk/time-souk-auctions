@@ -91,3 +91,38 @@ table.lgrid tr.dirty td { background: #fff6bf; }
   .doc { border: 0; padding: 0; max-width: none; box-shadow: none; }
   a { color: inherit; text-decoration: none; }
 }
+
+/* signatures, statements one per page */
+.doc-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; font-size: 12.5px; color: #4a4f55; }
+.doc-sign span { display: block; border-bottom: 1.5px solid #121417; height: 40px; margin-bottom: 6px; }
+.doc + .doc { margin-top: 26px; }
+
+/* dispatch and run sheet */
+table.dispatch tr.waiting td { color: var(--ink-2); background: var(--tint); }
+table.dispatch td.sign { min-width: 110px; }
+table.runsheet td { font-size: 13.5px; }
+
+/* message editor */
+.msg-row { display: grid; grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: start; border-bottom: 1.5px solid var(--line); padding-bottom: 8px; }
+.msg-key { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+.msg-row textarea { width: 100%; font: inherit; font-size: 13.5px; padding: 6px 8px; border: 1.5px solid var(--ink); border-radius: 0; resize: vertical; }
+@media (max-width: 900px) { .msg-row { grid-template-columns: minmax(0, 1fr); } }
+fieldset.plain { border: 0; padding: 0; margin: 0; }
+
+/* sold slips: 80 mm roll */
+.slips { display: flex; flex-wrap: wrap; gap: 14px; }
+.slip { width: 72mm; background: #fff; color: #000; border: 1.5px dashed var(--line); padding: 10px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.slip hr { border: 0; border-top: 1.5px dashed #000; margin: 4px 0; width: 100%; }
+.slip-brand { font-weight: 900; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.slip-lot { font-family: var(--f-display); font-size: 34px; line-height: 1; }
+.slip-watch { font-weight: 800; font-size: 15px; }
+.slip-sm { font-size: 11.5px; }
+.slip-row { display: flex; justify-content: space-between; gap: 8px; }
+.slip-row.big b { font-size: 18px; }
+@media print {
+  .slips { display: block; }
+  .slip { border: 0; width: auto; padding: 0; }
+  .slip + .slip { break-before: page; }
+  .doc-page + .doc-page { break-before: page; }
+  .doc + .doc { margin-top: 0; }
+}

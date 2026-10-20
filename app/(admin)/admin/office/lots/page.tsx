@@ -58,6 +58,7 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
       ...base,
       values: { winner: winnerOf(l), hammer: num(l.hammer), underbidder: l.underbidder, underbid: num(l.underbid), exception: l.exception || "" },
       info: { buyer: c ? `${c.code}${c.full_name ? ` · ${c.full_name}` : ""}` : "", status: l.status, invoice: l.invoiceNo || "", check: l.reserveCheck === "Below reserve" ? "Below reserve" : "" },
+      slip: l.sold || l.status === "Sold – add buyer" ? `/admin/office/slips?a=${a.number}&lot=${l.key}` : undefined,
       wa: l.sold && c ? { phone: c.phone, text: winnerMessage(w, l, due), ref: l.invoiceNo || "", name: c.full_name || c.instagram || c.code, total: l.hammer } : null
     };
   });

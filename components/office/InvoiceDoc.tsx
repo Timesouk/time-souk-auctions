@@ -1,46 +1,24 @@
 // The co-branded invoice, as printed by the workbook: both logos, the buyer, every lot, totals and how to pay.
 // Used in the back office (print or save as PDF) and on the buyer's private invoice link.
-import "@/app/office.css";
-import Image from "next/image";
-import logo from "@/public/brand/logo.png";
-import partner from "@/public/brand/dxb-watch.png";
 import { amt, type InvoiceView } from "@/lib/office/engine";
-import { companyName, dateText, pctText } from "@/lib/office/messages";
+import { dateText, pctText } from "@/lib/office/messages";
 import { COD, UAE, type OfficeSettings } from "@/lib/office/types";
-
-const dueText = (ms: number) => {
-  const d = new Date(ms + 4 * 3600e3);
-  const h = d.getUTCHours();
-  return `${dateText(d.toISOString().slice(0, 10), "EN")}, ${((h + 11) % 12) + 1}:${String(d.getUTCMinutes()).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`;
-};
+import { DocHead, dubaiStamp } from "./DocHead";
 
 export function InvoiceDoc({ inv, s }: { inv: InvoiceView; s: OfficeSettings }) {
   const c = inv.customer;
   const rate = (s.card_fee_pct || 0) / 100;
-  const brand = companyName(s);
-  const contact = [s.address, s.phone, s.email, s.instagram, s.website].filter(Boolean).join("  ·  ");
   const paid = inv.balance <= 0;
   return (
     <article className="doc">
-      <header className="doc-head">
-        <div className="doc-logos">
-          <Image src={logo} alt="The Time Souk" height={64} style={{ height: 64, width: "auto" }} />
-          <span className="doc-x" aria-hidden>×</span>
-          <Image src={partner} alt="DXB Watch" height={56} style={{ height: 56, width: "auto" }} />
-        </div>
-        <div className="doc-co">
-          <strong>{brand}</strong>
-          <span>{[s.legal_name, s.licence ? `Trade licence ${s.licence}` : "", s.trn ? `TRN ${s.trn}` : ""].filter(Boolean).join("  ·  ")}</span>
-          <span>{contact}</span>
-        </div>
-      </header>
+      <DocHead s={s} />
 
       <div className="doc-title">
         <h2>{s.vat_sales_pct > 0 ? "TAX INVOICE" : "INVOICE"}</h2>
         <dl>
           <dt>Invoice no.</dt><dd className="mono">{inv.no}</dd>
           <dt>Auction</dt><dd>{inv.auctionNo} · {dateText(inv.auction?.sale_date, "EN")}</dd>
-          {!paid && inv.due && inv.paysBy !== COD ? (<><dt>Please pay by</dt><dd>{dueText(inv.due)}</dd></>) : null}
+          {!paid && inv.due && inv.paysBy !== COD ? (<><dt>Please pay by</dt><dd>{dubaiStamp(inv.due)}</dd></>) : null}
           <dt>Status</dt><dd><b>{inv.status}</b></dd>
         </dl>
       </div>

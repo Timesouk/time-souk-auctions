@@ -45,9 +45,10 @@ These involve approvals by other companies. Start them now and carry on with the
    Then `supabase/migrations/0003_any_amount_cod_address.sql` (bid any amount, cash on delivery, delivery addresses). Run it **after** 0002.
    Then `supabase/migrations/0004_cod_uae_only.sql` (cash on delivery for UAE deliveries only). Run it **after** 0003.
    Then `supabase/migrations/0005_optional_estimates_zero_start.sql` (optional estimates, AED 0 starting bids, staff logins, one admin). Run it **after** 0004.
+   Then `supabase/migrations/0006_back_office.sql` (the back office: buyers, sellers, intake, consolidated invoices, payments, card links). Run it **after** 0005.
 4. Check **Table Editor**: you should see tables such as `auctions`, `lots`, `bids`, `invoices`, `profiles`.
 
-> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0005 are safe to run again.
+> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0006 are safe to run again.
 
 ### 1.3 Copy the API keys into Vercel later
 You'll need these three values in Part 3. Find them in **Project Settings → API Keys** (and **Project Settings → Data API** for the URL):
@@ -132,6 +133,7 @@ Go to **Project → Settings → Environment Variables**. For each line below, c
 | `RESEND_API_KEY` | From Resend (Part 2.2) |
 | `EMAIL_FROM` | `The Time Souk <auctions@yourdomain.com>` |
 | `STAFF_EMAIL` | Where staff alerts go (new consignments, payments). Several addresses: separate with commas |
+| `OFFICE_LINK_SECRET` | Optional. Another random string (40 letters and numbers). It signs the private invoice and receipt links buyers and sellers get on WhatsApp. If you change it later, links already sent stop working |
 
 Twilio and payment keys get added in Parts 4 and 5.
 
@@ -377,7 +379,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | Problem | Fix |
 |---|---|
 | Site still shows sample watches | Supabase variables missing, or you didn't redeploy after adding them. |
-| Site shows an error after connecting Supabase | Check all five database files ran, in order: `0001` to `0005` (Part 1.2). |
+| Site shows an error after connecting Supabase | Check all six database files ran, in order: `0001` to `0006` (Part 1.2). |
 | Can't change the timer on a lot | Its timer is running. Sudden death: stop it, or let it end and Reopen. |
 | No email code | Check Resend → **Logs**. Check Supabase SMTP settings (Part 2.3), and that the templates contain `{{ .Token }}`. Look in spam. |
 | Email code says "invalid" | Codes expire after 10 minutes and only the newest code works. Ask for a new one. |
@@ -396,6 +398,37 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 - **Arabic copy.** Have a native speaker read the whole site in Arabic.
 - **Licensing.** Confirm with Dubai Economy and Tourism that your trade license covers running auctions (online and on Instagram).
 - **VAT and AML.** Ask your accountant how VAT applies to the seller fee and to own-stock sales, and your compliance adviser whether ID checks or reporting rules apply to high-value sales. **Admin → Bidders** lets you note an ID check per bidder.
+
+---
+
+## Part 13 · The back office (the auction workbook, on the website)
+
+**Admin → Back office** does everything the Excel file *Time Souk Auction Manager* did, for every staff member at once, from any computer or phone. It works alongside the live console and website bidding.
+
+### 13.1 Once
+
+1. Run `supabase/migrations/0006_back_office.sql` (Part 1.2) if you haven't.
+2. **Back office → Settings** (admin): check the company and bank details, the co-branded name (**DXB Watch × The Time Souk**), fees, hours to pay, delivery and cash on delivery charges, the card fee, the WhatsApp language, and the text printed on documents. Have a lawyer review the intake declaration and seller declaration.
+3. **Back office → Import** (admin): save the workbook in Excel, then choose the `.xlsm` file. The page shows what's in it and what the invoices add up to per auction: compare with the Auctions sheet in Excel, then press **Import into the back office**. Auctions not yet on the website arrive as drafts (hidden from bidders). The Ziina key on the workbook's Settings sheet is never read. You can import again later with a newer copy: records are matched and updated, not doubled.
+4. Card links: the back office uses the website's Ziina key (`ZIINA_API_KEY`, Part 5.1). Without it, paste links made in the Ziina app on each invoice's page.
+
+### 13.2 Every auction
+
+| When | Where | What |
+|---|---|---|
+| Seller arrives | **Intake → New intake** | Choose the seller (or add one), type the watches, save. Print the receipt for signing or **Send on WhatsApp** (the seller gets a private link to it). |
+| Building the catalogue | **Intake** | Tick watches in stock, choose the auction, **Add to auction**. Own stock: **Lots → Add a lot**. Photos and descriptions: **Auctions & lots** as before. |
+| Before the live | **Statements**, **Run sheet** | Consignment listings for each seller; the run sheet for the presenter. |
+| During the live | **Lots → Live results** | Type the winner (@handle or buyer code) and hammer price, **Save** (Ctrl+S). A new handle becomes a new buyer. **Slip** prints the sold slip (80 mm); **WhatsApp** sends the winner their price and how to pay. Lots run in the live console: **Overview → Bring in website results**. |
+| After the live | **Invoices** | **Send** each invoice on WhatsApp (with a private link to the printable invoice). Overseas buyers: type the delivery fee on the invoice's page first. |
+| Buyer replies LINK | the invoice's page | **Make a card link**, then **Send link on WhatsApp**. Paid links are recorded on Payments by themselves. |
+| Money arrives | the invoice's page | **Record payment** (full balance and the usual method are filled in), then **Send confirmation on WhatsApp**. Deposits: the buyer's page. |
+| Chasing payment | **Invoices → Unpaid** | **Remind** on each row; buyers reminded recently show the time instead. |
+| Packing and delivery | **Lots → After the sale**, **Dispatch** | Delivery status, tray, courier and AWB; print the dispatch list for the courier to sign. |
+| Paying sellers | **Sellers →** the seller | Tick the lots paid for by their buyers, **Mark paid**. Then **Statements** for the seller's statement. |
+| Returns and refunds | **Lots** (Exception: Returned by buyer / Withdrawn / Buyer defaulted), **Payments → Refunds to make** | The lot leaves the invoice; the money to give back is listed. **Refund** records it and offers the WhatsApp message. |
+
+**Summary** shows every auction side by side (sales, profit, billed, collected, outstanding, owed to sellers). **Sent log** lists every WhatsApp message opened from the back office. **Settings → WhatsApp wording** lets you change any message in English and Arabic.
 
 ---
 

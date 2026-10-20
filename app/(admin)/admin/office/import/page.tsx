@@ -5,6 +5,8 @@ import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
+// importing a big workbook can take a while
+export const maxDuration = 60;
 
 export default async function OfficeImport() {
   const staff = IS_PREVIEW ? null : await getStaff();
