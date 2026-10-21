@@ -216,12 +216,18 @@ grant execute on function public.acct_void(uuid, text) to service_role;
 
 -- ───────────────────────────── security ─────────────────────────────
 
+-- Spelled out (not only in the loop) so Supabase's SQL editor can see RLS is on.
+alter table public.acct_accounts enable row level security;
+alter table public.acct_entries enable row level security;
+alter table public.acct_lines enable row level security;
+alter table public.acct_cleared enable row level security;
+alter table public.acct_reconciliations enable row level security;
+
 do $$
 declare t text;
 begin
   foreach t in array array['acct_accounts', 'acct_entries', 'acct_lines', 'acct_cleared', 'acct_reconciliations']
   loop
-    execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists %I on public.%I', t || '_staff', t);
     execute format('create policy %I on public.%I for select using (public.is_staff())', t || '_staff', t);
     execute format('revoke insert, update, delete on public.%I from anon, authenticated', t);
