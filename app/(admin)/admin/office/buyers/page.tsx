@@ -53,7 +53,7 @@ export default async function OfficeBuyers({ searchParams }: { searchParams: Pro
             <tbody>
               {list.slice(0, 500).map(c => (
                 <tr key={c.id}>
-                  <td className="mono"><Link href={`/admin/office/buyers/${c.code}`}>{c.code}</Link></td>
+                  <td className="mono"><Link href={`/admin/office/buyers/${c.code}`}>{c.code}</Link>{c.demo ? <small className="sub">demo</small> : null}</td>
                   <td>{c.instagram ? `@${c.instagram}` : ""}</td>
                   <td>{c.full_name}</td>
                   <td className="mono nowrap">{c.phone || <span className="warn-ink">missing</span>}</td>
@@ -70,7 +70,7 @@ export default async function OfficeBuyers({ searchParams }: { searchParams: Pro
         </div>
       )}
       {list.length > 500 ? <p className="fine">Showing the newest 500 of {list.length}. Search to find others.</p> : null}
-      <p className="fine">Total owed by buyers: {aed(o.customers.reduce((t, c) => t + Math.max(0, c.outstanding), 0))}.</p>
+      <p className="fine">Total owed by buyers: {aed(o.customers.filter(c => !c.demo).reduce((t, c) => t + Math.max(0, c.outstanding), 0))}.</p>
     </div>
   );
 }

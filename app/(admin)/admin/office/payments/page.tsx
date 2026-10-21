@@ -25,8 +25,10 @@ export default async function OfficePayments({ searchParams }: { searchParams: P
     .filter(e => !q || `${e.invoice_no} ${e.customer?.code} ${e.customer?.instagram} ${e.customer?.full_name} ${e.method} ${e.reference} ${e.notes}`.toLowerCase().includes(q))
     .slice()
     .reverse();
-  const buyers = o.data.customers.map(c => ({ id: c.id, label: `${c.code} · ${c.full_name || ""}${c.instagram ? ` @${c.instagram}` : ""}`.trim() }));
-  const sum = (k: string) => o.ledger.filter(e => e.kind === k).reduce((t, e) => t + e.amount, 0);
+  const buyers = o.data.customers.map(c => ({ id: c.id, label: `${c.code} · ${c.full_name || ""}${c.instagram ? ` @${c.instagram}` : ""}${c.demo ? " (demo)" : ""}`.trim() }));
+  const consignors = o.data.sellers.filter(x => x.kind !== "own").map(x => ({ id: x.id, label: `${x.code} · ${x.name}` }));
+  // totals leave out the demo (training) auction
+  const sum = (k: string) => o.ledger.filter(e => e.kind === k && !e.demo).reduce((t, e) => t + e.amount, 0);
   return (
     <div className="stack" style={{ gap: 18 }}>
       <div className="adm-head">
@@ -44,7 +46,7 @@ export default async function OfficePayments({ searchParams }: { searchParams: P
 
       <details className="panel-card">
         <summary><strong>Record a payment</strong> <span className="fine">(quicker from the invoice&apos;s page)</span></summary>
-        <EntryForm kind="Payment" buyers={buyers} />
+        <EntryForm kind="Payment" buyers={buyers} sellers={consignors} />
       </details>
       <details className="panel-card">
         <summary><strong>Record a deposit</strong> <span className="fine">(comes off the buyer&apos;s invoices automatically)</span></summary>
@@ -116,7 +118,7 @@ export default async function OfficePayments({ searchParams }: { searchParams: P
                     <td>{e.kind}</td>
                     <td>{e.customer ? <Link href={`/admin/office/buyers/${e.customer.code}`}>{e.customer.code}</Link> : "–"}{e.customer?.full_name ? <small className="sub">{e.customer.full_name}</small> : null}</td>
                     <td className="mono nowrap">{e.invoice_no ? <Link href={`/admin/office/invoices/${e.invoice_no}`}>{e.invoice_no}</Link> : ""}</td>
-                    <td>{e.method}{e.reference ? <small className="sub">{e.reference}</small> : null}{e.cardFee ? <small className="sub">card fee {amt(e.cardFee)}</small> : null}</td>
+                    <td>{e.method}{e.paidTo ? <small className="sub">to {e.paidTo.code} · {e.paidTo.name}</small> : null}{e.reference ? <small className="sub">{e.reference}</small> : null}{e.cardFee ? <small className="sub">card fee {amt(e.cardFee)}</small> : null}{e.demo ? <small className="sub">demo</small> : null}</td>
                     <td className="n">{e.kind === "Refund" ? "−" : ""}{amt(e.amount)}</td>
                     <td>{e.order}</td>
                     <td className={e.check ? "warn-ink fine" : "fine"}>{e.check}</td>

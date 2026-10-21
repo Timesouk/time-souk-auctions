@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { loadOffice, pickAuction } from "@/lib/office/load";
-import { AuctionPicker, SetupNeeded } from "@/components/office/bits";
+import { AuctionPicker, DemoNote, SetupNeeded } from "@/components/office/bits";
 import { StatementDoc, statementFor } from "@/components/office/SellerDocs";
 import { PrintButton } from "@/components/office/forms";
 
@@ -29,6 +29,7 @@ export default async function OfficeStatements({ searchParams }: { searchParams:
           <PrintButton label={one ? "Print / save as PDF" : `Print all ${sts.length}`} />
         </div>
       </div>
+      {a.demo ? <DemoNote /> : null}
       <div className="chips no-print">
         <Link className="chip" href={`/admin/office/statements?a=${a.number}`} aria-pressed={!one}>All consignors</Link>
         {sellers.map(x => (

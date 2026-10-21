@@ -5,15 +5,21 @@ import { adminClient } from "@/lib/supabase/admin";
 import { requireAdmin, requireStaff, type Staff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
 import { normIg, toE164 } from "@/lib/format";
-import { findCustomer, nextCustomerCode, invoiceNo } from "@/lib/office/engine";
-import { fetchAll } from "@/lib/office/load";
-import { DELIVERY_STATUSES, EXCEPTIONS, PAY_METHODS, type Customer } from "@/lib/office/types";
+import { compute, findCustomer, nextCustomerCode, invoiceNo, pad2, planTrays, type TrayLot } from "@/lib/office/engine";
+import { fetchAll, loadOfficeData } from "@/lib/office/load";
+import { DELIVERY_STATUSES, DIRECT, EXCEPTIONS, PAY_METHODS, type Customer } from "@/lib/office/types";
 import type { ImportPlan } from "@/lib/office/import";
 import type { Result } from "../actions";
 import { booksClosedUpTo, closedMessage } from "@/lib/office/lock";
 
 const ok = (message: string, id?: string): Result => ({ ok: true, message, id });
-const bad = (message: string): Result => ({ ok: false, message });
+/** A column added by 0008 missing means that update hasn't been run yet: say so plainly. */
+const bad = (message: string): Result => ({
+  ok: false,
+  message: /does not exist/.test(message) && /instagram|demo|paid_to_seller_id|payout_amount/.test(message)
+    ? "The back office needs one more database update: run supabase/migrations/0008_office_extras.sql in the Supabase SQL Editor."
+    : message
+});
 
 async function guard(fn: (staff: Staff) => Promise<Result>, admin = false): Promise<Result> {
   try {
@@ -46,11 +52,11 @@ async function allCodes() {
   return fetchAll<{ code: string }>(adminClient(), "customers", "code", "code");
 }
 
-/** Adds a buyer with the next code (B0061…). Retries if two staff add one at the same moment. */
+/** Adds a buyer with the next code (B0061…, or D0001… for a demo buyer). Retries if two staff add one at the same moment. */
 async function insertCustomer(row: Partial<Customer>): Promise<Customer> {
   const db = adminClient();
   for (let i = 0; i < 4; i++) {
-    const code = nextCustomerCode(await allCodes());
+    const code = nextCustomerCode(await allCodes(), row.demo ? "D" : "B");
     const { data, error } = await db.from("customers").insert({ ...row, code }).select("*").single();
     if (!error) return data as Customer;
     if (error.code !== "23505" || /instagram|profile/.test(error.message)) throw new Error(error.message);
@@ -107,24 +113,30 @@ export async function saveLots(changes: LotChange[]) {
     if (!Array.isArray(changes) || !changes.length) return ok("Nothing to save.");
     if (changes.length > 400) return bad("Save fewer rows at a time.");
     const db = adminClient();
-    const customers = await fetchAll<Customer>(db, "customers", "id, code, instagram, full_name, phone", "code");
-    const sellers = await fetchAll<{ id: string; code: string; name: string; kind: string }>(db, "sellers", "id, code, name, kind", "code");
+    const customers = await fetchAll<Customer>(db, "customers", "id, code, instagram, full_name, phone, demo", "code");
+    const sellers = await fetchAll<{ id: string; code: string; name: string; kind: string; demo: boolean }>(db, "sellers", "id, code, name, kind, demo", "code");
     const notes: string[] = [];
     let saved = 0;
+    // each lot's auction: for the closed-books check, the demo rules and the trays
+    const { data: info, error: infoErr } = await db.from("lots").select("id, lot_number, auction_id, auctions(number, sale_date, demo)").in("id", changes.map(c => c.id));
+    if (infoErr) return bad(infoErr.message);
+    type AInfo = { number: number; sale_date: string; demo: boolean };
+    const lotInfo = new Map((info || []).map(r => [r.id as string, { lot_number: r.lot_number as number, auction_id: r.auction_id as string, a: (Array.isArray(r.auctions) ? r.auctions[0] : r.auctions) as AInfo | null }]));
     const lock = await booksClosedUpTo();
     if (lock) {
       const MONEY = ["winner", "hammer", "exception", "cost", "fee_pct", "fee_fixed", "seller", "seller_paid_on"];
-      const touched = changes.filter(c => Object.keys(c.fields || {}).some(k => MONEY.includes(k))).map(c => c.id);
-      if (touched.length) {
-        const { data: rows } = await db.from("lots").select("id, lot_number, auctions(number, sale_date)").in("id", touched);
-        for (const r of rows || []) {
-          const a = (Array.isArray(r.auctions) ? r.auctions[0] : r.auctions) as { number: number; sale_date: string } | null;
-          if (a && a.sale_date <= lock) return bad(`Lot ${a.number}-${String(r.lot_number).padStart(2, "0")}: ${closedMessage(lock)}`);
-        }
+      for (const c of changes) {
+        if (!Object.keys(c.fields || {}).some(k => MONEY.includes(k))) continue;
+        const r = lotInfo.get(c.id);
+        if (r?.a && r.a.sale_date <= lock) return bad(`Lot ${r.a.number}-${pad2(r.lot_number)}: ${closedMessage(lock)}`);
       }
     }
+    const trayAuctions = new Set<string>();
     for (const ch of changes) {
       const f = ch.fields || {};
+      const here = lotInfo.get(ch.id);
+      const demoLot = !!here?.a?.demo;
+      if (here && ["winner", "hammer", "exception"].some(k => k in f)) trayAuctions.add(here.auction_id);
       const pub: Record<string, unknown> = {};
       const priv: Record<string, unknown> = {};
       for (const [k, raw] of Object.entries(f)) {
@@ -142,13 +154,22 @@ export async function saveLots(changes: LotChange[]) {
               priv.winner_customer_id = null;
               break;
             }
-            let c = findCustomer(customers as Customer[], v);
+            // the demo auction only uses demo buyers, and real auctions only real ones
+            const same = customers.filter(x => !!x.demo === demoLot);
+            const other = customers.filter(x => !!x.demo !== demoLot);
+            let c = findCustomer(same as Customer[], v);
             if (!c) {
+              const elsewhere = findCustomer(other as Customer[], v);
+              if (elsewhere) {
+                return bad(demoLot
+                  ? `"${v}" is a real buyer (${elsewhere.code}). In the demo auction, type a new handle (it becomes a demo buyer) or a demo buyer's code (D0001…).`
+                  : `"${v}" is a demo buyer (${elsewhere.code}): demo buyers only win lots in the demo auction.`);
+              }
               const ig = normIg(v);
-              if (!ig || /^b\d+$/i.test(v)) return bad(`"${v}" isn't a buyer. Type their Instagram handle or buyer code.`);
-              c = await insertCustomer({ instagram: ig });
+              if (!ig || /^[bd]\d+$/i.test(v)) return bad(`"${v}" isn't a buyer. Type their Instagram handle or buyer code.`);
+              c = await insertCustomer({ instagram: ig, ...(demoLot ? { demo: true } : {}) });
               customers.push(c);
-              notes.push(`New buyer ${c.code} (@${ig}): add their WhatsApp number on Buyers.`);
+              notes.push(`New ${demoLot ? "demo " : ""}buyer ${c.code} (@${ig}): add their WhatsApp number on Buyers.`);
             }
             priv.winner_text = v.slice(0, 80);
             priv.winner_customer_id = c.id;
@@ -194,6 +215,7 @@ export async function saveLots(changes: LotChange[]) {
             }
             const s = sellers.find(x => x.code.toUpperCase() === v.toUpperCase());
             if (!s) return bad(`Seller "${v}" isn't on Sellers.`);
+            if (!!s.demo !== demoLot) return bad(demoLot ? `In the demo auction, use the demo sellers (${sellers.filter(x => x.demo).map(x => x.code).join(", ") || "DEMO-C, DEMO-O"}).` : `${s.code} is a demo seller: only for the demo auction.`);
             priv.seller_id = s.id;
             priv.source = s.kind === "own" ? "stock" : "consign";
             priv.consignor_name = s.kind === "own" ? "" : s.name;
@@ -221,8 +243,68 @@ export async function saveLots(changes: LotChange[]) {
       }
       saved++;
     }
+    for (const id of trayAuctions) notes.push(...(await assignTrays(id, customers)));
     refresh();
     return ok([`Saved ${saved} lot${saved === 1 ? "" : "s"}.`, ...notes].join(" "));
+  });
+}
+
+/** Buyers who won more than one lot in this auction get a tray number (their watches go together). Returns what changed, to tell staff. */
+async function assignTrays(auctionId: string, customers: Pick<Customer, "id" | "code" | "instagram">[]) {
+  const db = adminClient();
+  const { data, error } = await db.from("lots").select("id, lot_number, auctions(number), lot_private(winner_customer_id, hammer, exception, tray)").eq("auction_id", auctionId);
+  if (error || !data?.length) return [];
+  const one = <T,>(x: T | T[] | null) => (Array.isArray(x) ? x[0] : x);
+  const no = (one(data[0].auctions as { number: number } | { number: number }[] | null) as { number: number } | null)?.number || 0;
+  const rows: TrayLot[] = data.map(r => {
+    const p = (one(r.lot_private as Record<string, unknown> | Record<string, unknown>[] | null) || {}) as Record<string, unknown>;
+    return {
+      id: r.id as string, lot_number: r.lot_number as number, winner: (p.winner_customer_id as string) || null,
+      hammer: p.hammer == null ? null : Number(p.hammer), exception: (p.exception as string) || null, tray: p.tray == null ? null : Number(p.tray)
+    };
+  });
+  const plan = planTrays(rows);
+  const byTray = new Map<number, string[]>();
+  for (const t of plan.set) byTray.set(t.tray, [...(byTray.get(t.tray) || []), t.id]);
+  for (const [tray, ids] of byTray) {
+    const { error: e } = await db.from("lot_private").update({ tray, updated_at: new Date().toISOString() }).in("lot_id", ids);
+    if (e) return [`Couldn't set tray ${tray}: ${e.message}`];
+  }
+  return plan.trays.map(t => {
+    const c = customers.find(x => x.id === t.winner);
+    const who = c ? (c.instagram ? `@${c.instagram}` : c.code) : "a buyer";
+    return `Tray ${t.tray}: ${who} has ${t.lots.length} lots (${t.lots.map(n => `${no}-${pad2(n)}`).join(", ")}).`;
+  });
+}
+
+/** Deletes a lot typed by mistake. Only lots with no result, no website bids and no website invoice. */
+export async function deleteOfficeLot(id: string) {
+  return guard(async () => {
+    const db = adminClient();
+    const { data: lot, error } = await db
+      .from("lots")
+      .select("id, lot_number, bid_count, auction_id, auctions(number, sale_date), lot_private(hammer, winner_customer_id, winner_text, intake_item_id)")
+      .eq("id", id)
+      .maybeSingle();
+    if (error) return bad(error.message);
+    if (!lot) return bad("That lot isn't there any more (refresh the page).");
+    const one = <T,>(x: T | T[] | null) => (Array.isArray(x) ? x[0] : x);
+    const a = one(lot.auctions as { number: number; sale_date: string } | { number: number; sale_date: string }[] | null);
+    const p = (one(lot.lot_private as Record<string, unknown> | Record<string, unknown>[] | null) || {}) as Record<string, unknown>;
+    const key = `${a?.number ?? "?"}-${pad2(lot.lot_number as number)}`;
+    if (p.hammer != null || p.winner_customer_id || String(p.winner_text || "").trim()) {
+      return bad(`Lot ${key} has a result. Clear its winner and hammer price first (or mark it Withdrawn instead).`);
+    }
+    if (Number(lot.bid_count) > 0) return bad(`Lot ${key} has bids on the website, so it can't be deleted. Mark it Withdrawn instead.`);
+    const lock = await booksClosedUpTo();
+    if (lock && a && a.sale_date <= lock) return bad(`Lot ${key}: ${closedMessage(lock)}`);
+    const { data: web } = await db.from("invoices").select("id").eq("lot_id", id).limit(1);
+    if (web?.length) return bad(`Lot ${key} has a website invoice. Mark it Withdrawn instead.`);
+    const { error: e2 } = await db.from("lots").delete().eq("id", id);
+    if (e2) return bad(e2.message);
+    refresh();
+    revalidatePath(`/admin/auctions/${lot.auction_id}`);
+    return ok(`Lot ${key} deleted.${p.intake_item_id ? " The watch is back in stock on Intake." : ""}`);
   });
 }
 
@@ -237,17 +319,18 @@ export async function addLot(input: NewLot) {
     const db = adminClient();
     const brand = str(input.brand, 80);
     if (!brand) return bad("Type the brand.");
-    const { data: auction } = await db.from("auctions").select("id, number").eq("id", input.auction_id).maybeSingle();
+    const { data: auction } = await db.from("auctions").select("id, number, demo").eq("id", input.auction_id).maybeSingle();
     if (!auction) return bad("Choose the auction.");
     let lotNo = posInt(input.lot_number);
     if (!lotNo) {
       const { data: last } = await db.from("lots").select("lot_number").eq("auction_id", auction.id).order("lot_number", { ascending: false }).limit(1).maybeSingle();
       lotNo = (last?.lot_number || 0) + 1;
     }
-    let seller: { id: string; name: string; kind: string } | null = null;
+    let seller: { id: string; name: string; kind: string; demo: boolean } | null = null;
     if (str(input.seller)) {
-      const { data } = await db.from("sellers").select("id, name, kind").ilike("code", str(input.seller, 20)).maybeSingle();
+      const { data } = await db.from("sellers").select("id, name, kind, demo").ilike("code", str(input.seller, 20)).maybeSingle();
       if (!data) return bad(`Seller "${input.seller}" isn't on Sellers.`);
+      if (!!data.demo !== !!auction.demo) return bad(auction.demo ? "In the demo auction, use the demo sellers (DEMO-C, DEMO-O)." : `${str(input.seller, 20).toUpperCase()} is a demo seller: only for the demo auction.`);
       seller = data;
     }
     const bp = str(input.box_papers, 40);
@@ -334,8 +417,9 @@ export async function bringInWebsiteResults(auctionId: string) {
       filled++;
     }
     const synced = await syncWebsitePayments(auctionId);
+    const trays = filled ? await assignTrays(auctionId, customers) : [];
     refresh();
-    const parts = [`${filled} result${filled === 1 ? "" : "s"} brought in.`];
+    const parts = [`${filled} result${filled === 1 ? "" : "s"} brought in.`, ...trays];
     if (skipped) parts.push(`${skipped} already had a result typed (left as typed).`);
     if (added.length) parts.push(`New buyers: ${added.join(", ")}.`);
     if (synced) parts.push(`${synced} website payment${synced === 1 ? "" : "s"} added to Payments.`);
@@ -402,6 +486,8 @@ export async function saveAdjustment(input: AdjustmentInput) {
 
 export type EntryInput = {
   kind: "Payment" | "Deposit" | "Refund"; customer_id: string; invoice_no: string; method: string; amount: string; entry_date: string; reference: string; received_by: string; notes: string;
+  /** Method DIRECT: the consignor the buyer paid. */
+  paid_to_seller_id?: string;
 };
 
 /** Records a payment, a deposit or a refund. */
@@ -419,20 +505,40 @@ export async function recordEntry(input: EntryInput) {
     const lock = await booksClosedUpTo();
     const when = ymd(input.entry_date) || new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
     if (lock && when <= lock) return bad(closedMessage(lock));
+    // The buyer paid the consignor directly: it must be a payment on an invoice with that seller's lots, not yet settled with them.
+    const direct = method === DIRECT;
+    const sellerId = str(input.paid_to_seller_id, 40);
+    let sellerCode = "";
+    if (direct) {
+      if (input.kind !== "Payment") return bad("“Paid to seller directly” is only for payments on an invoice.");
+      if (!sellerId) return bad("Choose the seller the buyer paid.");
+      const o = compute(await loadOfficeData());
+      const invoice = o.invoicesByNo.get(inv);
+      if (!invoice) return bad(`There's no open invoice ${inv}.`);
+      const theirs = invoice.lots.filter(l => l.seller_id === sellerId && l.type === "Consignment");
+      if (!theirs.length) return bad("That seller has no consigned lots on this invoice.");
+      if (theirs.every(l => l.seller_paid_on)) return bad("This seller's lots on the invoice are already settled. Record the buyer's payment to them before settling the seller.");
+      sellerCode = theirs[0].seller?.code || "";
+    }
     const db = adminClient();
     const { data, error } = await db
       .from("ledger")
       .insert({
         kind: input.kind, customer_id: input.customer_id, invoice_no: input.kind === "Deposit" ? "" : inv, method, amount: amt,
         entry_date: ymd(input.entry_date) || undefined, reference: str(input.reference, 120), received_by: str(input.received_by, 60) || staff.name, notes: str(input.notes, 300),
-        created_by: staff.id
+        created_by: staff.id, ...(direct ? { paid_to_seller_id: sellerId } : {})
       })
       .select("id")
       .single();
     if (error) return bad(error.message);
     refresh();
     const what = input.kind === "Deposit" ? "Deposit" : input.kind === "Refund" ? "Refund" : "Payment";
-    return ok(`${what} of AED ${amt.toLocaleString("en-US")} recorded.`, data.id);
+    return ok(
+      direct
+        ? `Payment of AED ${amt.toLocaleString("en-US")} the buyer made to seller ${sellerCode} recorded. It comes off what we owe ${sellerCode} when you settle with them.`
+        : `${what} of AED ${amt.toLocaleString("en-US")} recorded.`,
+      data.id
+    );
   });
 }
 
@@ -508,7 +614,7 @@ export async function importWorkbook(plan: ImportPlan) {
     }
     const custId = new Map((await fetchAll<{ id: string; code: string }>(db, "customers", "id, code", "code")).map(c => [c.code.toUpperCase(), c.id]));
 
-    // auctions (by number); new ones stay drafts, so they don't appear on the website
+    // auctions (by number); new ones are Instagram-only (they ran on Instagram): real auctions, kept off the website
     const { data: existingAuctions } = await db.from("auctions").select("id, number");
     const auctionId = new Map((existingAuctions || []).map(a => [a.number as number, a.id as string]));
     for (const a of plan.auctions) {
@@ -521,12 +627,12 @@ export async function importWorkbook(plan: ImportPlan) {
         const prebid = new Date(Date.parse(live) - 3 * 86400e3).toISOString();
         const { data, error } = await db
           .from("auctions")
-          .insert({ number: a.number, sale_date: a.sale_date, live_starts_at: new Date(Date.parse(live)).toISOString(), prebid_opens_at: prebid, status: "draft", ...office })
+          .insert({ number: a.number, sale_date: a.sale_date, live_starts_at: new Date(Date.parse(live)).toISOString(), prebid_opens_at: prebid, status: "draft", instagram: true, ...office })
           .select("id")
           .single();
         fail(`Auction ${a.number}`, error);
         auctionId.set(a.number, data!.id);
-        say.push(`Auction ${a.number} added as a draft (hidden from the website).`);
+        say.push(`Auction ${a.number} added as Instagram only (not on the website).`);
       }
     }
 

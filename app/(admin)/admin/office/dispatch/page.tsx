@@ -3,7 +3,7 @@ import { loadOffice, pickAuction } from "@/lib/office/load";
 import { amt } from "@/lib/office/engine";
 import { dateText } from "@/lib/office/messages";
 import { COD, UAE } from "@/lib/office/types";
-import { AuctionPicker, LotKeys, SetupNeeded } from "@/components/office/bits";
+import { AuctionPicker, DemoNote, LotKeys, SetupNeeded } from "@/components/office/bits";
 import { PrintButton } from "@/components/office/forms";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +33,7 @@ export default async function OfficeDispatch({ searchParams }: { searchParams: P
           <PrintButton label="Print the list" />
         </div>
       </div>
+      {a.demo ? <DemoNote /> : null}
       <p className="fine no-print">Grey rows are still waiting for payment: don&apos;t hand them over. Set each lot&apos;s delivery status on <Link href={`/admin/office/lots?a=${a.number}&view=after`}>Lots › After the sale</Link>.</p>
       {list.length === 0 ? (
         <p className="empty">Everything from this auction has been delivered or collected.</p>

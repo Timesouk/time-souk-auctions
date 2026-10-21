@@ -14,7 +14,11 @@ async function load(): Promise<{ auction: Auction; lots: Lot[]; timer: number } 
   if (IS_PREVIEW) return { ...sampleAuction(), timer: SAMPLE_SETTINGS.timer_seconds };
   const db = adminClient();
   let { data: auction } = await db.from("auctions").select("*").eq("status", "published").order("number").limit(1).maybeSingle();
-  if (!auction) ({ data: auction } = await db.from("auctions").select("*").eq("status", "draft").order("number", { ascending: false }).limit(1).maybeSingle());
+  if (!auction) {
+    // the newest draft, never the demo (training) auction
+    const r = await db.from("auctions").select("*").eq("status", "draft").eq("demo", false).order("number", { ascending: false }).limit(1).maybeSingle();
+    auction = r.error ? (await db.from("auctions").select("*").eq("status", "draft").order("number", { ascending: false }).limit(1).maybeSingle()).data : r.data;
+  }
   if (!auction) return null;
   const [{ data: lots }, { data: s }] = await Promise.all([
     db.from("lots").select("*").eq("auction_id", auction.id).order("lot_number"),

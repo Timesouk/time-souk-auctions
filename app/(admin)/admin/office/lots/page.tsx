@@ -3,7 +3,7 @@ import { loadOffice, pickAuction } from "@/lib/office/load";
 import { amt, auctionDue, type LotView } from "@/lib/office/engine";
 import { Wording, dateText, winnerMessage } from "@/lib/office/messages";
 import { BOX_PAPERS, CONDITIONS, DELIVERY_STATUSES, EXCEPTIONS } from "@/lib/office/types";
-import { AuctionPicker, SetupNeeded } from "@/components/office/bits";
+import { AuctionPicker, DemoNote, SetupNeeded } from "@/components/office/bits";
 import { LotsGrid, type GridCol, type GridRow } from "@/components/office/LotsGrid";
 import { AddLot } from "@/components/office/AddLot";
 
@@ -33,9 +33,11 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
   const winnerOf = (l: LotView) => l.winner_text || (l.customer ? (l.customer.instagram ? `@${l.customer.instagram}` : l.customer.code) : "");
   const rows: GridRow[] = lots.map((l): GridRow => {
     const c = l.customer;
+    const hasResult = l.hammer != null || !!l.winner_customer_id || !!String(l.winner_text || "").trim();
     const base = {
       id: l.id, key: l.key, watch: `${l.brand} ${l.model}`.trim() + (l.reference ? ` · ${l.reference}` : ""), seller: l.seller ? `${l.seller.code}${l.type === "Consignment" ? "" : " · own"}` : "",
-      status: l.status, href: l.invoiceNo ? `/admin/office/invoices/${l.invoiceNo}` : undefined
+      status: l.status, href: l.invoiceNo ? `/admin/office/invoices/${l.invoiceNo}` : undefined,
+      canDelete: !hasResult && !l.current_bid
     };
     if (view === "after") {
       return {
@@ -57,7 +59,7 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
     return {
       ...base,
       values: { winner: winnerOf(l), hammer: num(l.hammer), underbidder: l.underbidder, underbid: num(l.underbid), exception: l.exception || "" },
-      info: { buyer: c ? `${c.code}${c.full_name ? ` · ${c.full_name}` : ""}` : "", status: l.status, invoice: l.invoiceNo || "", check: l.reserveCheck === "Below reserve" ? "Below reserve" : "" },
+      info: { buyer: c ? `${c.code}${c.full_name ? ` · ${c.full_name}` : ""}` : "", status: l.status, invoice: l.invoiceNo || "", tray: l.tray ? String(l.tray) : "", check: l.reserveCheck === "Below reserve" ? "Below reserve" : "" },
       slip: l.sold || l.status === "Sold – add buyer" ? `/admin/office/slips?a=${a.number}&lot=${l.key}` : undefined,
       wa: l.sold && c ? { phone: c.phone, text: winnerMessage(w, l, due), ref: l.invoiceNo || "", name: c.full_name || c.instagram || c.code, total: l.hammer } : null
     };
@@ -65,10 +67,10 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
 
   const cols: Record<View, GridCol[]> = {
     live: [
-      { key: "winner", label: "Winner (@ or buyer code)", list: "dl-buyers", w: 170 },
-      { key: "hammer", label: "Hammer (AED)", kind: "num", w: 100 },
-      { key: "underbidder", label: "Underbidder", w: 120 },
-      { key: "underbid", label: "Underbid", kind: "num", w: 90 },
+      { key: "winner", label: "Winner (@ or code)", list: "dl-buyers", w: 140 },
+      { key: "hammer", label: "Hammer (AED)", kind: "num", w: 85 },
+      { key: "underbidder", label: "Underbidder", w: 100 },
+      { key: "underbid", label: "Underbid", kind: "num", w: 75 },
       { key: "exception", label: "Exception", kind: "select", options: EXCEPTIONS }
     ],
     after: [
@@ -96,12 +98,14 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
       { key: "fee_fixed", label: "Fixed fee", kind: "num", w: 70 }
     ]
   };
-  const info: Record<View, { key: string; label: string; n?: boolean }[]> = {
-    live: [{ key: "buyer", label: "Buyer" }, { key: "status", label: "Status" }, { key: "invoice", label: "Invoice" }, { key: "check", label: "" }],
+  const info: Record<View, { key: string; label: string; n?: boolean; wrap?: boolean }[]> = {
+    // the lot number links to its invoice, so the live view leaves the invoice column out (more room for the buttons)
+    live: [{ key: "buyer", label: "Buyer", wrap: true }, { key: "status", label: "Status" }, { key: "tray", label: "Tray", n: true }, { key: "check", label: "" }],
     after: [{ key: "status", label: "Status" }, { key: "invoice", label: "Invoice" }, { key: "net", label: "Net to seller", n: true }, { key: "payout", label: "Seller payout" }],
     details: [{ key: "type", label: "Type" }, { key: "fee", label: "Fee" }, { key: "check", label: "Reserve check" }]
   };
-  const buyers = view === "live" ? o.data.customers.flatMap(c => (c.instagram ? [`@${c.instagram}`, c.code] : [c.code])) : undefined;
+  // the demo auction only uses demo buyers and sellers, real auctions only real ones
+  const buyers = view === "live" ? o.data.customers.filter(c => !!c.demo === !!a.demo).flatMap(c => (c.instagram ? [`@${c.instagram}`, c.code] : [c.code])) : undefined;
   const sold = lots.filter(l => l.sold);
   const q = (v: View) => `/admin/office/lots?a=${a.number}${v === "live" ? "" : `&view=${v}`}`;
   const nextNo = lots.reduce((m, l) => Math.max(m, l.lot_number), 0) + 1;
@@ -117,6 +121,7 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
         </div>
         <AuctionPicker auctions={o.data.auctions} current={a} action="/admin/office/lots" extra={view === "live" ? {} : { view }} />
       </div>
+      {a.demo ? <DemoNote /> : null}
       <div className="chips" role="tablist">
         {(Object.keys(VIEWS) as View[]).map(v => (
           <Link key={v} className="chip" href={q(v)} aria-pressed={v === view}>
@@ -126,7 +131,8 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
       </div>
       {view === "live" ? (
         <p className="fine">
-          Type the winner&apos;s Instagram handle (or buyer code) and the hammer price as each lot sells, then Save. A handle that isn&apos;t a buyer yet becomes a new buyer. Press <b>WhatsApp</b> to send the winner their price and how to pay.
+          Type the winner&apos;s Instagram handle (or buyer code) and the hammer price as each lot sells, then Save. A handle that isn&apos;t a buyer yet becomes a new buyer.
+          A buyer who wins a second lot gets a <b>tray</b> number automatically, so their watches go together. <b>Print slip</b> prints the sold slip straight away; <b>WhatsApp</b> sends the winner their price and how to pay.
         </p>
       ) : null}
       <LotsGrid
@@ -134,11 +140,11 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
         cols={cols[view]}
         info={info[view]}
         buyers={buyers}
-        sellers={o.data.sellers.map(x => x.code)}
+        sellers={o.data.sellers.filter(x => !!x.demo === !!a.demo).map(x => x.code)}
         waMode={s.wa_mode}
         empty="No lots in this auction yet. Add one below, add them under Auctions & lots, or ADD TO AUCTION from intake."
       />
-      <AddLot auctionId={a.id} nextNo={nextNo} sellers={o.data.sellers.map(x => ({ code: x.code, name: x.name }))} />
+      <AddLot auctionId={a.id} nextNo={nextNo} sellers={o.data.sellers.filter(x => !!x.demo === !!a.demo).map(x => ({ code: x.code, name: x.name }))} />
     </div>
   );
 }

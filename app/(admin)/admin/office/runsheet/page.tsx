@@ -2,7 +2,7 @@ import Link from "next/link";
 import { loadOffice, pickAuction } from "@/lib/office/load";
 import { amt } from "@/lib/office/engine";
 import { dateText } from "@/lib/office/messages";
-import { AuctionPicker, Pill, SetupNeeded } from "@/components/office/bits";
+import { AuctionPicker, DemoNote, Pill, SetupNeeded } from "@/components/office/bits";
 import { PrintButton } from "@/components/office/forms";
 
 export const dynamic = "force-dynamic";
@@ -31,6 +31,7 @@ export default async function OfficeRunSheet({ searchParams }: { searchParams: P
           <Link className="btn" href={`/admin/office/slips?a=${a.number}`}>Sold slips</Link>
         </div>
       </div>
+      {a.demo ? <DemoNote /> : null}
       <p className="fine no-print">Keep it open on a second screen during the live: reload to see results typed on Lots.</p>
       <div className="tbl-wrap">
         <table className="runsheet">

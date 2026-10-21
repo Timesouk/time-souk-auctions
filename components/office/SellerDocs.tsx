@@ -1,5 +1,6 @@
 // Seller paperwork, printed with both logos: the consignment intake receipt and the listing / statement per auction.
-import { amt, type IntakeView, type LotView, type Office } from "@/lib/office/engine";
+import { amt, pad3, type IntakeView, type LotView, type Office } from "@/lib/office/engine";
+import { DIRECT } from "@/lib/office/types";
 import { dateText, pctText } from "@/lib/office/messages";
 import type { OAuction, OfficeSettings, Seller } from "@/lib/office/types";
 import { DocHead } from "./DocHead";
@@ -81,7 +82,11 @@ export function ReceiptDoc({ receipt, items, seller, s }: { receipt: string; ite
   );
 }
 
-export type Statement = { auction: OAuction; seller: Seller; lots: LotView[]; listing: boolean };
+export type Statement = {
+  auction: OAuction; seller: Seller; lots: LotView[]; listing: boolean;
+  /** What this auction's buyers paid the seller directly. */
+  direct: number;
+};
 
 /** One seller's lots in one auction. Before the results are in it's a listing; after, a statement of what's owed. */
 export function statementFor(o: Office, auctionId: string, sellerId: string): Statement | null {
@@ -91,15 +96,21 @@ export function statementFor(o: Office, auctionId: string, sellerId: string): St
   const lots = o.lots.filter(l => l.auction_id === auctionId && l.seller_id === sellerId);
   if (!lots.length) return null;
   const decided = lots.some(l => l.sold || l.status === "Unsold" || l.exception);
-  return { auction, seller, lots, listing: !decided && auction.sale_date >= o.today };
+  const prefix = `TS${pad3(auction.number)}-`;
+  const direct = o.ledger
+    .filter(e => e.kind === "Payment" && e.method === DIRECT && e.paid_to_seller_id === sellerId && e.invoice_no.toUpperCase().startsWith(prefix))
+    .reduce((t, e) => t + e.amount, 0);
+  return { auction, seller, lots, listing: !decided && auction.sale_date >= o.today, direct: Math.round(direct * 100) / 100 };
 }
 
 export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
-  const { auction, seller, lots, listing } = st;
+  const { auction, seller, lots, listing, direct } = st;
   const sold = lots.filter(l => l.sold);
   const sum = (f: (l: LotView) => number) => sold.reduce((t, l) => t + f(l), 0);
   const net = sum(l => l.net);
-  const paid = sold.filter(l => l.payout === "Paid").reduce((t, l) => t + l.net, 0);
+  // the cash that moved when lots were settled (+ we paid, − the seller paid us)
+  const paid = sold.filter(l => l.payout === "Paid").reduce((t, l) => t + (l.payout_amount != null ? Number(l.payout_amount) : l.net), 0);
+  const left = Math.round((net - direct - paid) * 100) / 100;
   const own = seller.kind === "own";
   return (
     <article className="doc doc-page">
@@ -154,7 +165,9 @@ export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
         <div className="doc-foot">
           <div className="doc-pay">
             <p>{sold.length} of {lots.length} sold.</p>
-            {net - paid > 0.005 ? <p><b>We&apos;ll pay AED {amt(net - paid)}</b> once each buyer has paid.</p> : <p><b>Paid in full.</b></p>}
+            {left > 0.005 ? <p><b>We&apos;ll pay AED {amt(left)}</b> once each buyer has paid.</p>
+              : left < -0.005 ? <p><b>Please pay us AED {amt(-left)}</b>: buyers paid you directly more than your net (our fee is in it).</p>
+                : <p><b>Settled in full.</b></p>}
           </div>
           <table className="doc-totals">
             <tbody>
@@ -162,8 +175,9 @@ export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
               <tr><td>Seller fees</td><td className="n">−{amt(sum(l => l.fee))}</td></tr>
               {s.vat_fee_pct ? <tr><td>VAT on fees</td><td className="n">−{amt(sum(l => l.vatFee))}</td></tr> : null}
               <tr className="tot"><td>Net to you</td><td className="n">{amt(net)}</td></tr>
-              <tr><td>Paid so far</td><td className="n">{paid ? `−${amt(paid)}` : "0"}</td></tr>
-              <tr className="tot"><td>Still to pay you</td><td className="n">{amt(net - paid)}</td></tr>
+              {direct ? <tr><td>Paid to you directly by buyers</td><td className="n">−{amt(direct)}</td></tr> : null}
+              <tr><td>{paid < 0 ? "You paid us" : "Paid so far"}</td><td className="n">{paid > 0 ? `−${amt(paid)}` : paid < 0 ? `+${amt(-paid)}` : "0"}</td></tr>
+              <tr className="tot"><td>{left < -0.005 ? "You owe us" : "Still to pay you"}</td><td className="n">{amt(Math.abs(left))}</td></tr>
             </tbody>
           </table>
         </div>

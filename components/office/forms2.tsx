@@ -9,6 +9,7 @@ import {
 } from "@/app/(admin)/admin/office/actions2";
 import { BOX_PAPERS, CONDITIONS, type MessageOverrides, type OfficeSettings } from "@/lib/office/types";
 import { Wording, cardLinkMessage, type Code } from "@/lib/office/messages";
+import { settleCash, type SettleLot } from "@/lib/office/engine";
 import { WaButton } from "./Wa";
 
 const today = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
@@ -64,22 +65,30 @@ export function NewSeller() {
   );
 }
 
-export type PayoutLot = { id: string; key: string; watch: string; net: number; invoice: string; state: string };
+export type PayoutLot = { id: string; key: string; watch: string; net: number; invoice: string; state: string; settle: SettleLot | null; direct: number };
 
-/** Tick the lots you've paid the seller for, then mark them paid. */
+const money = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+
+/**
+ * Tick the lots you've settled with the seller, then mark them paid. A buyer who paid the seller directly
+ * comes off the amount; if that's more than the seller's net, the seller pays us the difference.
+ */
 export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots: PayoutLot[]; accounts?: { code: string; name: string }[]; defaultAccount?: string }) {
-  const [pick, setPick] = useState<string[]>(lots.filter(l => l.state === "Due to seller").map(l => l.id));
+  const [pick, setPick] = useState<string[]>(lots.filter(l => l.state === "Due to seller" || l.state === "Seller owes us").map(l => l.id));
   const [date, setDate] = useState(today());
   const [ref, setRef] = useState("");
   const [account, setAccount] = useState(defaultAccount);
   const { pending, msg, run } = useAction();
-  const total = lots.filter(l => pick.includes(l.id)).reduce((t, l) => t + l.net, 0);
+  const chosen = lots.filter(l => pick.includes(l.id));
+  const cash = settleCash(chosen.map(l => l.settle).filter((x): x is SettleLot => !!x));
+  const total = Math.round(chosen.reduce((t, l) => t + (cash.get(l.id) ?? l.net), 0) * 100) / 100;
+  const anyDirect = lots.some(l => l.direct);
   if (!lots.length) return <p className="fine">Nothing owed to this seller.</p>;
   return (
     <div className="stack" style={{ gap: 10 }}>
       <div className="tbl-wrap">
         <table>
-          <thead><tr><th /><th>Lot</th><th>Watch</th><th>Invoice</th><th className="n">Net</th><th>State</th></tr></thead>
+          <thead><tr><th /><th>Lot</th><th>Watch</th><th>Invoice</th><th className="n">Net</th>{anyDirect ? <th className="n">Buyer paid seller</th> : null}{anyDirect ? <th className="n">To settle</th> : null}<th>State</th></tr></thead>
           <tbody>
             {lots.map(l => (
               <tr key={l.id}>
@@ -87,8 +96,10 @@ export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots:
                 <td className="mono">{l.key}</td>
                 <td>{l.watch}</td>
                 <td className="mono">{l.invoice}</td>
-                <td className="n">{l.net.toLocaleString("en-US", { maximumFractionDigits: 2 })}</td>
-                <td className={l.state === "Due to seller" ? "ok-ink" : "fine"}>{l.state}</td>
+                <td className="n">{money(l.net)}</td>
+                {anyDirect ? <td className="n">{l.direct ? money(l.direct) : ""}</td> : null}
+                {anyDirect ? <td className="n">{pick.includes(l.id) ? money(cash.get(l.id) ?? l.net) : ""}</td> : null}
+                <td className={l.state === "Due to seller" ? "ok-ink" : l.state === "Seller owes us" ? "warn-ink" : "fine"}>{l.state}</td>
               </tr>
             ))}
           </tbody>
@@ -99,15 +110,18 @@ export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots:
         <input type="date" value={date} onChange={e => setDate(e.target.value)} />
         <input placeholder="Transfer reference" value={ref} onChange={e => setRef(e.target.value)} />
         {accounts.length ? (
-          <select value={account} onChange={e => setAccount(e.target.value)} aria-label="Paid from">
-            {accounts.map(a => <option key={a.code} value={a.code}>Paid from {a.code} · {a.name}</option>)}
+          <select value={account} onChange={e => setAccount(e.target.value)} aria-label={total < 0 ? "Received into" : "Paid from"}>
+            {accounts.map(a => <option key={a.code} value={a.code}>{total < 0 ? "Received into" : "Paid from"} {a.code} · {a.name}</option>)}
           </select>
         ) : null}
         <button type="button" className="btn pri" disabled={pending || !pick.length} onClick={() => run(() => markSellerPaid({ lotIds: pick, date, ref, account: accounts.length ? account : undefined }))}>
-          Mark {pick.length} paid · AED {total.toLocaleString("en-US", { maximumFractionDigits: 2 })}
+          {total < 0 ? `Mark ${pick.length} settled · seller paid us AED ${money(-total)}` : `Mark ${pick.length} paid · AED ${money(total)}`}
         </button>
       </div>
-      <p className="fine">Lots marked &ldquo;Wait&rdquo; haven&apos;t been paid for by the buyer yet.</p>
+      <p className="fine">
+        Lots marked &ldquo;Wait&rdquo; haven&apos;t been paid for by the buyer yet.
+        {anyDirect ? " Where a buyer paid the seller directly, that comes off what you pay; if it's more than the seller's net, they owe us the difference: mark it settled once they've paid it." : ""}
+      </p>
       <Msg r={msg} />
     </div>
   );

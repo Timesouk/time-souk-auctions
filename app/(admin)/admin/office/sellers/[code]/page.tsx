@@ -37,12 +37,24 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
         <div><span className="k">Hammer</span><b>{amt(x.hammer)}</b></div>
         <div><span className="k">Fees</span><b>{amt(x.fees)}</b></div>
         <div><span className="k">Net to seller</span><b>{amt(x.net)}</b></div>
-        <div><span className="k">Still owed</span><b className={x.owed > 0.005 ? "warn-ink" : undefined}>{amt(x.owed)}</b></div>
+        {x.direct ? <div><span className="k">Buyers paid them directly</span><b>{amt(x.direct)}</b></div> : null}
+        {x.owed < -0.005 ? (
+          <div><span className="k">Seller owes us</span><b className="warn-ink">{amt(-x.owed)}</b></div>
+        ) : (
+          <div><span className="k">Still owed</span><b className={x.owed > 0.005 ? "warn-ink" : undefined}>{amt(x.owed)}</b></div>
+        )}
       </div>
       {x.kind !== "own" ? (
         <section className="panel-card">
           <span className="k">Payouts</span>
-          <PayoutForm lots={owing.map(l => ({ id: l.id, key: l.key, watch: `${l.brand} ${l.model}`.trim(), net: l.net, invoice: l.invoiceNo || "", state: l.payout }))} accounts={payFrom} defaultAccount={o.data.settings.acct_payout_default} />
+          <PayoutForm
+            lots={owing.map(l => ({
+              id: l.id, key: l.key, watch: `${l.brand} ${l.model}`.trim(), net: l.net, invoice: l.invoiceNo || "", state: l.payout, settle: l.settle,
+              direct: l.settle?.lot_number === Math.min(...owing.filter(x => x.settle?.group === l.settle?.group).map(x => x.lot_number)) ? Math.max(0, l.settle?.unapplied || 0) : 0
+            }))}
+            accounts={payFrom}
+            defaultAccount={o.data.settings.acct_payout_default}
+          />
         </section>
       ) : null}
       <section className="panel-card">

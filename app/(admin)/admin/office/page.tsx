@@ -2,7 +2,7 @@ import Link from "next/link";
 import { loadOffice, pickAuction } from "@/lib/office/load";
 import { aed } from "@/lib/office/engine";
 import { companyName, dateText } from "@/lib/office/messages";
-import { AuctionPicker, SetupNeeded, Tile } from "@/components/office/bits";
+import { AuctionPicker, AuctionState, DemoNote, SetupNeeded, Tile } from "@/components/office/bits";
 import { RunButton } from "@/components/office/RunButton";
 import { bringInWebsiteResults } from "./actions";
 
@@ -29,8 +29,8 @@ export default async function OfficeHome({ searchParams }: { searchParams: Promi
       ]
     : [];
   const overdue = o.owing.filter(i => (i.hoursOverdue || 0) > 0);
-  const checks = o.ledger.filter(e => e.check);
-  const dueSellers = o.lots.filter(l => l.payout === "Due to seller");
+  const checks = o.ledger.filter(e => e.check && !e.demo);
+  const dueSellers = o.lots.filter(l => l.payout === "Due to seller" && !l.demo);
   const inStock = o.intake.filter(i => i.status === "In stock" || /: in stock$/.test(i.status)).length;
   const target = sum?.target || o.data.settings.lot_target || 100;
   return (
@@ -49,11 +49,12 @@ export default async function OfficeHome({ searchParams }: { searchParams: Promi
         </p>
       ) : (
         <>
+          {a.demo ? <DemoNote /> : null}
           <section className="stack" style={{ gap: 10 }}>
             <div className="row" style={{ justifyContent: "space-between" }}>
               <h2 className="h-sec">
                 Auction {a.number} · {dateText(a.sale_date, "EN")}
-                {a.status === "draft" ? <span className="pill" style={{ marginInlineStart: 8 }}>draft</span> : null}
+                <AuctionState a={a} />
               </h2>
               <div className="row">
                 <Link className="btn sm" href={`/admin/office/lots${q}`}>Lots &amp; results</Link>
@@ -116,7 +117,7 @@ export default async function OfficeHome({ searchParams }: { searchParams: Promi
           </li>
           <li>
             <Link href="/admin/office/sellers">
-              <b>{dueSellers.length}</b> {dueSellers.length === 1 ? "lot is" : "lots are"} paid for and due to their seller · {aed(dueSellers.reduce((t, l) => t + l.net, 0))}
+              <b>{dueSellers.length}</b> {dueSellers.length === 1 ? "lot is" : "lots are"} paid for and due to their seller · {aed(dueSellers.reduce((t, l) => t + l.toPay, 0))}
             </Link>
           </li>
           <li>

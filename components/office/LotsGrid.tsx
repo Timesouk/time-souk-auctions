@@ -3,7 +3,8 @@
 // Enter moves down to the same column on the next lot, like Excel.
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { saveLots } from "@/app/(admin)/admin/office/actions";
+import { deleteOfficeLot, saveLots } from "@/app/(admin)/admin/office/actions";
+import { markSlipsPrinted } from "@/app/(admin)/admin/office/actions2";
 import { WaButton } from "./Wa";
 import { statusClass } from "@/lib/office/status";
 
@@ -19,16 +20,38 @@ export type GridRow = {
   info: Record<string, string>;
   wa?: { phone: string; text: string; ref: string; name: string; total: number | null } | null;
   href?: string;
-  /** link to this lot's sold slip */
+  /** this lot's sold slip (printed from here, without leaving the page) */
   slip?: string;
+  /** the lot can be deleted (no result yet) */
+  canDelete?: boolean;
 };
+
+/**
+ * Prints one page without leaving this one: loads it in a hidden frame and opens the print window for it.
+ * The slip page sets the 80 mm roll size and hides everything but the slip when printing.
+ */
+function printInFrame(url: string, done: () => void) {
+  const f = document.createElement("iframe");
+  f.setAttribute("aria-hidden", "true");
+  f.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  f.src = url;
+  f.onload = () => {
+    const w = f.contentWindow;
+    if (!w) return;
+    w.focus();
+    w.print();
+    done();
+    setTimeout(() => f.remove(), 60000);
+  };
+  document.body.appendChild(f);
+}
 
 export function LotsGrid({
   rows, cols, info, buyers, sellers, waMode, empty
 }: {
   rows: GridRow[];
   cols: GridCol[];
-  info: { key: string; label: string; n?: boolean }[];
+  info: { key: string; label: string; n?: boolean; wrap?: boolean }[];
   buyers?: string[];
   sellers?: string[];
   waMode: "app" | "web";
@@ -39,6 +62,7 @@ export function LotsGrid({
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [filter, setFilter] = useState("");
+  const [busyRow, setBusyRow] = useState<string | null>(null);
   const table = useRef<HTMLTableElement>(null);
   const dirty = Object.keys(edits).length;
 
@@ -91,6 +115,27 @@ export function LotsGrid({
     return () => window.removeEventListener("beforeunload", warn);
   }, [edits]);
 
+  const printSlip = (r: GridRow) => {
+    if (!r.slip) return;
+    setBusyRow(r.id);
+    printInFrame(r.slip, () => {
+      setBusyRow(null);
+      void markSlipsPrinted([r.id]).then(() => router.refresh());
+    });
+    setTimeout(() => setBusyRow(b => (b === r.id ? null : b)), 15000);
+  };
+
+  const remove = (r: GridRow) => {
+    if (!window.confirm(`Are you sure you want to delete lot ${r.key}${r.watch ? ` (${r.watch})` : ""}?\n\nThis can't be undone.`)) return;
+    setBusyRow(r.id);
+    start(async () => {
+      const res = await deleteOfficeLot(r.id);
+      setMsg({ ok: res.ok, text: res.message });
+      setBusyRow(null);
+      if (res.ok) router.refresh();
+    });
+  };
+
   /** Enter: same column, next row. */
   const onEnter = (e: React.KeyboardEvent<HTMLElement>, ri: number, ci: number) => {
     if (e.key !== "Enter") return;
@@ -127,7 +172,7 @@ export function LotsGrid({
                 <th>Watch</th>
                 {cols.map(c => <th key={c.key}>{c.label}</th>)}
                 {info.map(c => <th key={c.key} className={c.n ? "n" : undefined}>{c.label}</th>)}
-                <th />
+                <th className="acts" />
               </tr>
             </thead>
             <tbody>
@@ -161,14 +206,23 @@ export function LotsGrid({
                     </td>
                   ))}
                   {info.map(c => (
-                    <td key={c.key} className={c.n ? "n" : undefined}>
+                    <td key={c.key} className={c.n ? "n" : c.wrap ? "wrap" : undefined}>
                       {c.key === "status" ? <span className={`pill ${statusClass(r.info.status)}`}>{r.info.status}</span> : r.info[c.key]}
                     </td>
                   ))}
-                  <td className="nowrap">
-                    {r.slip && !edits[r.id] ? <a className="btn sm" href={r.slip} style={{ marginInlineEnd: 4 }}>Slip</a> : null}
+                  <td className="nowrap acts">
+                    {r.slip && !edits[r.id] ? (
+                      <button type="button" className="btn sm" style={{ marginInlineEnd: 4 }} disabled={busyRow === r.id} onClick={() => printSlip(r)} title="Print this lot's sold slip (80 mm)">
+                        {busyRow === r.id ? "Printing…" : "Print slip"}
+                      </button>
+                    ) : null}
                     {r.wa && !edits[r.id] ? (
                       <WaButton label="WhatsApp" phone={r.wa.phone} text={r.wa.text} mode={waMode} log={{ ref: r.wa.ref, name: r.wa.name, total: r.wa.total, balance: r.wa.total, kind: `Won lot ${r.key}`, link: "" }} />
+                    ) : null}
+                    {r.canDelete && !edits[r.id] ? (
+                      <button type="button" className="btn sm danger" style={{ marginInlineStart: 4 }} disabled={pending || busyRow === r.id} onClick={() => remove(r)} title={`Delete lot ${r.key}`}>
+                        Delete
+                      </button>
                     ) : null}
                   </td>
                 </tr>
@@ -187,6 +241,7 @@ export function LotsGrid({
         ) : null}
       </div>
       {msg && !msg.ok ? <p className="alert" role="status">{msg.text}</p> : null}
+      {msg && msg.ok && /Tray|deleted/.test(msg.text) ? <p className="alert info" role="status">{msg.text}</p> : null}
     </div>
   );
 }

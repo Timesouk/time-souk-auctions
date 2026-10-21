@@ -3,7 +3,7 @@
 // deposits, refunds, seller payouts), plus the entries typed under Accounting (expenses, stock bought, transfers,
 // owners' money, opening balances, corrections). Every report reads from that one journal.
 import { r2, type Office } from "./engine";
-import type { Account, AccountType, AcctData, ManualEntry } from "./types";
+import { DIRECT, type Account, type AccountType, type AcctData, type ManualEntry } from "./types";
 
 export type Source = "sale" | "fees" | "cogs" | "payment" | "deposit" | "refund" | "apply" | "payout" | "manual";
 
@@ -56,7 +56,7 @@ function guessAccount(method: string) {
 
 const later = (a: string, b: string) => (a > b ? a : b);
 
-/** The whole journal. */
+/** The whole journal. The demo (training) auction, its buyers and sellers are never in it. */
 export function buildJournal(o: Office, acct: AcctData): Journal {
   const s = o.data.settings;
   const byCode = new Map(acct.accounts.map(a => [a.code, a]));
@@ -91,6 +91,7 @@ export function buildJournal(o: Office, acct: AcctData): Journal {
 
   // ── sales: one entry per invoice, on the auction day
   for (const inv of o.invoices) {
+    if (inv.demo) continue;
     const date = inv.auction?.sale_date || o.today;
     const lines: Omit<JLine, "key" | "entry" | "date">[] = [];
     let own = 0;
@@ -123,7 +124,7 @@ export function buildJournal(o: Office, acct: AcctData): Journal {
   // ── seller payouts, per seller, day, account and reference
   const payouts = new Map<string, { date: string; seller: string; name: string; account: string; ref: string; net: number; lots: string[] }>();
   for (const l of o.lots) {
-    if (!l.sold) continue;
+    if (!l.sold || l.demo) continue;
     const date = l.auction?.sale_date || o.today;
     if (l.type === "Consignment") {
       const k = `${l.auctionNo}:${l.seller?.code}`;
@@ -137,7 +138,8 @@ export function buildJournal(o: Office, acct: AcctData): Journal {
         const code = known(account) ? account : "1020";
         const pk = `${l.seller?.code}:${l.seller_paid_on}:${code}:${l.payout_ref}`;
         const p = payouts.get(pk) || { date: l.seller_paid_on, seller: l.seller?.code || "", name: l.seller?.name || "", account: code, ref: l.payout_ref, net: 0, lots: [] };
-        p.net += l.net;
+        // the cash that moved: the lot's net, less what the buyer paid the seller directly
+        p.net += l.payout_amount != null ? Number(l.payout_amount) : l.net;
         p.lots.push(l.key);
         payouts.set(pk, p);
       }
@@ -176,6 +178,16 @@ export function buildJournal(o: Office, acct: AcctData): Journal {
   // ── money in and out recorded on Payments
   const lastDeposit = new Map<string, string>();
   for (const e of o.ledger) {
+    if (e.demo) continue;
+    if (e.kind === "Payment" && e.method === DIRECT) {
+      // the buyer paid the consignor: what we owe the seller goes down by what the buyer owed us
+      const seller = e.paidTo ? `${e.paidTo.code} ${e.paidTo.name}`.trim() : "?";
+      add({ id: `pay:${e.id}`, date: e.entry_date, source: "payment", title: `Paid to seller directly · ${e.invoice_no || "?"}`, ref: e.invoice_no, href: e.invoice_no ? `/admin/office/invoices/${e.invoice_no}` : "/admin/office/payments" }, [
+        { account: "2100", debit: e.amount, credit: 0, memo: `Received by ${seller}${e.reference ? ` · ${e.reference}` : ""}` },
+        { account: "1100", debit: 0, credit: e.amount, memo: e.customer ? `${e.customer.code} ${e.customer.full_name || ""}`.trim() : "" }
+      ]);
+      continue;
+    }
     const acc = methodAcct(e.method);
     const who = e.customer ? `${e.customer.code} ${e.customer.full_name || ""}`.trim() : "";
     if (e.kind === "Deposit") {
@@ -201,7 +213,7 @@ export function buildJournal(o: Office, acct: AcctData): Journal {
 
   // ── deposits used on invoices
   for (const inv of o.invoices) {
-    if (inv.depositApplied <= 0) continue;
+    if (inv.demo || inv.depositApplied <= 0) continue;
     const date = later(inv.auction?.sale_date || o.today, lastDeposit.get(inv.customer.id) || "");
     add({ id: `apply:${inv.no}`, date, source: "apply", title: `Deposit used · ${inv.no}`, ref: inv.no, href: `/admin/office/invoices/${inv.no}` }, [
       { account: "2200", debit: inv.depositApplied, credit: 0, memo: `${inv.customer.code}` },
@@ -209,11 +221,13 @@ export function buildJournal(o: Office, acct: AcctData): Journal {
     ]);
   }
 
-  // ── sellers paid
+  // ── sellers paid (or, when a buyer paid them more than their net, the seller paying us the difference)
   for (const [k, p] of payouts) {
-    add({ id: `payout:${k}`, date: p.date, source: "payout", title: `Seller payout · ${p.seller} ${p.name}`.trim(), ref: p.ref || p.lots.join(", "), href: `/admin/office/sellers/${p.seller}` }, [
-      { account: "2100", debit: p.net, credit: 0, memo: `Lots ${p.lots.join(", ")}` },
-      { account: p.account, debit: 0, credit: p.net, memo: p.ref || "Payout" }
+    const cash = r2(p.net);
+    const out = cash >= 0;
+    add({ id: `payout:${k}`, date: p.date, source: "payout", title: `${out ? "Seller payout" : "Seller settled with us"} · ${p.seller} ${p.name}`.trim(), ref: p.ref || p.lots.join(", "), href: `/admin/office/sellers/${p.seller}` }, [
+      { account: "2100", debit: out ? cash : 0, credit: out ? 0 : -cash, memo: `Lots ${p.lots.join(", ")}` },
+      { account: p.account, debit: out ? 0 : -cash, credit: out ? cash : 0, memo: p.ref || (out ? "Payout" : "From the seller") }
     ]);
   }
 
@@ -405,10 +419,12 @@ export function receivablesAging(o: Office) {
 
 export function consignorPayables(o: Office) {
   return o.sellers
-    .filter(x => x.kind !== "own" && Math.abs(x.owed) > 0.005)
+    .filter(x => x.kind !== "own" && !x.demo && Math.abs(x.owed) > 0.005)
     .map(x => {
-      const lots = o.lots.filter(l => l.seller_id === x.id && l.sold && l.payout !== "Paid");
-      return { seller: x, due: r2(lots.filter(l => l.payout === "Due to seller").reduce((t, l) => t + l.net, 0)), waiting: r2(lots.filter(l => l.payout !== "Due to seller").reduce((t, l) => t + l.net, 0)) };
+      const lots = o.lots.filter(l => l.seller_id === x.id && l.sold && !l.demo && l.payout !== "Paid");
+      const due = r2(lots.filter(l => l.payout === "Due to seller" || l.payout === "Seller owes us").reduce((t, l) => t + l.toPay, 0));
+      // anything a buyer paid the seller that isn't matched to an unsettled lot
+      return { seller: x, due: r2(due + (x.owed - lots.reduce((t, l) => t + l.toPay, 0))), waiting: r2(lots.filter(l => l.payout === "Wait – buyer not paid").reduce((t, l) => t + l.toPay, 0)) };
     })
     .sort((a, b) => b.due + b.waiting - (a.due + a.waiting));
 }

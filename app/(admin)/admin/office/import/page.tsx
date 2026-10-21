@@ -22,7 +22,7 @@ export default async function OfficeImport() {
         </p>
       </div>
       <ul className="plain fine">
-        <li>Auctions that aren&apos;t on the website yet are added as <b>drafts</b>, so they don&apos;t appear to bidders.</li>
+        <li>Auctions that aren&apos;t on the website yet are added as <b>Instagram only</b>: real auctions in the back office, but not shown on the website.</li>
         <li>Lots already on the website keep their photos and descriptions; only the office fields (seller, reserve, winner, hammer, delivery, payouts) are filled in.</li>
         <li>The co-branded name (<b>{data?.settings.brand_name || DEFAULT_SETTINGS.brand_name}</b>) stays as set here.</li>
       </ul>

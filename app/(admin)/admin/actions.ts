@@ -70,18 +70,40 @@ export async function setAuctionTimer(auctionId: string, seconds: number | null)
   });
 }
 
-export async function setAuctionStatus(id: string, status: "draft" | "published" | "closed") {
+/**
+ * Where an auction runs. "instagram": published for the Instagram live but not on the website (its website status stays draft,
+ * so bidders never see it there). "published": on the website and Instagram. "draft": not published anywhere.
+ */
+export async function setAuctionStatus(id: string, status: "draft" | "instagram" | "published" | "closed") {
   return guard(async () => {
     const db = adminClient();
+    const { data: a, error: e0 } = await db.from("auctions").select("id, status, demo").eq("id", id).maybeSingle();
+    if (e0) return bad(e0.message);
+    if (!a) return bad("Auction not found.");
+    if (a.demo) return bad("This is the demo auction for training: it can't be published.");
+    let error: { message: string } | null = null;
     if (status === "closed") {
+      if (a.status !== "published") return bad("Only an auction on the website can be closed there.");
       const { data: live } = await db.from("lots").select("id").eq("auction_id", id).gt("ends_at", new Date().toISOString()).limit(1);
       if (live && live.length) return bad("A lot is live. Wait for its timer to end.");
-      await db.from("auctions").update({ status, block_lot_id: null }).eq("id", id);
+      ({ error } = await db.from("auctions").update({ status, block_lot_id: null }).eq("id", id));
+    } else if (status === "instagram") {
+      ({ error } = await db.from("auctions").update({ status: "draft", instagram: true, block_lot_id: null }).eq("id", id));
+    } else if (status === "published") {
+      ({ error } = await db.from("auctions").update({ status, instagram: true }).eq("id", id));
     } else {
-      await db.from("auctions").update({ status }).eq("id", id);
+      ({ error } = await db.from("auctions").update({ status: "draft", instagram: false }).eq("id", id));
     }
+    if (error) return bad(/instagram/.test(error.message) ? "Run supabase/migrations/0008_office_extras.sql in Supabase first." : error.message);
     revalidatePath(`/admin/auctions/${id}`);
-    return ok(status === "published" ? "Published: the catalogue is now on the website." : status === "closed" ? "Auction closed." : "Back to draft: hidden from the website.");
+    revalidatePath("/admin/auctions");
+    revalidatePath("/admin/office", "layout");
+    revalidatePath("/", "layout");
+    return ok(
+      status === "published" ? "Published on the website and Instagram: the catalogue is now on the website."
+        : status === "instagram" ? "Published for Instagram only. The back office treats it as a real auction; the website doesn't show it."
+          : status === "closed" ? "Auction closed." : "Back to draft: not published anywhere."
+    );
   });
 }
 

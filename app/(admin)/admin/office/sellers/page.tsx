@@ -12,7 +12,7 @@ export default async function OfficeSellers() {
   if (o instanceof Error) return <SetupNeeded error={o.message} />;
   const s = o.data.settings;
   const list = o.sellers.slice().sort((a, b) => (a.kind === b.kind ? a.code.localeCompare(b.code) : a.kind === "own" ? -1 : 1));
-  const owed = o.sellers.reduce((t, x) => t + Math.max(0, x.owed), 0);
+  const owed = o.sellers.filter(x => !x.demo).reduce((t, x) => t + Math.max(0, x.owed), 0);
   return (
     <div className="stack" style={{ gap: 16 }}>
       <div className="adm-head">
@@ -36,7 +36,7 @@ export default async function OfficeSellers() {
               <tr key={x.id}>
                 <td className="mono"><Link href={`/admin/office/sellers/${x.code}`}>{x.code}</Link></td>
                 <td>{x.name}</td>
-                <td>{x.kind === "own" ? "Own stock" : "Consignment"}</td>
+                <td>{x.kind === "own" ? "Own stock" : "Consignment"}{x.demo ? <small className="sub">demo</small> : null}</td>
                 <td className="mono nowrap">{x.phone}</td>
                 <td className="nowrap">{x.kind === "own" ? "" : `${pctText((x.fee_pct ?? s.fee_pct) / 100)}${(x.fee_fixed ?? s.fee_fixed) ? ` + ${amt(x.fee_fixed ?? s.fee_fixed)}` : ""}`}</td>
                 <td className="n">{x.lotsEntered}</td>
@@ -45,7 +45,7 @@ export default async function OfficeSellers() {
                 <td className="n">{amt(x.fees)}</td>
                 <td className="n">{amt(x.net)}</td>
                 <td className="n">{amt(x.paidOut)}</td>
-                <td className="n">{x.owed > 0.005 ? <b>{amt(x.owed)}</b> : "0"}</td>
+                <td className="n">{x.owed > 0.005 ? <b>{amt(x.owed)}</b> : x.owed < -0.005 ? <b className="warn-ink" title="Buyers paid this seller directly more than their net">owes us {amt(-x.owed)}</b> : "0"}</td>
                 <td className="n">{amt(x.profit)}</td>
               </tr>
             ))}

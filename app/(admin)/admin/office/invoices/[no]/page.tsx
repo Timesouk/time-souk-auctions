@@ -3,7 +3,7 @@ import { loadOffice } from "@/lib/office/load";
 import { amt } from "@/lib/office/engine";
 import { invoiceMessages } from "@/lib/office/view";
 import { COD } from "@/lib/office/types";
-import { Pill, SetupNeeded } from "@/components/office/bits";
+import { DemoNote, Pill, SetupNeeded } from "@/components/office/bits";
 import { InvoiceDoc } from "@/components/office/InvoiceDoc";
 import { WaButton } from "@/components/office/Wa";
 import { AdjustmentForm, CopyButton, DeleteEntry, EntryForm, PrintButton } from "@/components/office/forms";
@@ -44,6 +44,9 @@ export default async function OfficeInvoice({ params }: { params: Promise<{ no: 
   const adj = inv.adjustment;
   const confirm = { phone: c.phone, mode: s.wa_mode, name: c.full_name, ref: inv.no, code: m.code, invoice: inv.no, balanceBefore: inv.balance, settings: s, overrides: o.data.messages };
   const n = (v: number | null | undefined) => (v == null ? "" : String(v));
+  // consignors whose lots on this invoice aren't settled yet: the buyer may have paid one of them directly
+  const consignors = [...new Map(inv.lots.filter(l => l.type === "Consignment" && l.seller && !l.seller_paid_on).map(l => [l.seller!.id, l.seller!])).values()]
+    .map(x => ({ id: x.id, label: `${x.code} · ${x.name}` }));
   return (
     <div className="stack" style={{ gap: 18 }}>
       <div className="adm-head no-print">
@@ -64,13 +67,14 @@ export default async function OfficeInvoice({ params }: { params: Promise<{ no: 
           <CopyButton text={m.url} label="Copy buyer's link" />
         </div>
       </div>
+      {inv.demo ? <DemoNote /> : null}
       {!c.phone ? <p className="alert no-print">No WhatsApp number for this buyer yet: <Link href={`/admin/office/buyers/${c.code}`}>add it on their page</Link>.</p> : null}
       {inv.feeMissing ? <p className="alert no-print">Overseas delivery: type the delivery fee below before sending.</p> : null}
 
       <div className="inv-layout">
         <InvoiceDoc inv={inv} s={s} />
         <aside className="stack no-print" style={{ gap: 14 }}>
-          {inv.balance > 0.005 && inv.paysBy !== COD ? (
+          {inv.balance > 0.005 && inv.paysBy !== COD && !inv.demo ? (
             <div className="panel-card">
               <span className="k">Card payment link · AED {amt(inv.cardAmount)} incl. {s.card_fee_pct}% fee</span>
               {openCardLink(o, inv) ? <p className="fine">A link for this amount is already open; it&apos;s included in the invoice and reminder messages.</p> : null}
@@ -87,7 +91,7 @@ export default async function OfficeInvoice({ params }: { params: Promise<{ no: 
           ) : null}
           {inv.balance > 0.005 ? (
             <div className="panel-card">
-              <EntryForm kind="Payment" title={`Record payment · balance AED ${amt(inv.balance)}`} customerId={c.id} invoiceNo={inv.no} amount={inv.balance} method={inv.paysBy} lockBuyer confirm={confirm} />
+              <EntryForm kind="Payment" title={`Record payment · balance AED ${amt(inv.balance)}`} customerId={c.id} invoiceNo={inv.no} amount={inv.balance} method={inv.paysBy} lockBuyer confirm={confirm} sellers={consignors} />
             </div>
           ) : null}
           {inv.balance < -0.005 ? (
@@ -121,7 +125,7 @@ export default async function OfficeInvoice({ params }: { params: Promise<{ no: 
   );
 }
 
-function EntriesTable({ entries, admin }: { entries: { id: string; entry_date: string; kind: string; method: string; amount: number; cardFee: number; reference: string; check: string }[]; admin: boolean }) {
+function EntriesTable({ entries, admin }: { entries: { id: string; entry_date: string; kind: string; method: string; amount: number; cardFee: number; reference: string; check: string; paidTo?: { code: string; name: string } }[]; admin: boolean }) {
   return (
     <div className="tbl-wrap">
       <table>
@@ -131,7 +135,7 @@ function EntriesTable({ entries, admin }: { entries: { id: string; entry_date: s
             <tr key={e.id}>
               <td className="nowrap">{e.entry_date}</td>
               <td>{e.kind}</td>
-              <td>{e.method}{e.reference ? <small className="sub">{e.reference}</small> : null}{e.cardFee ? <small className="sub">incl. card fee {amt(e.cardFee)}</small> : null}</td>
+              <td>{e.method}{e.paidTo ? <small className="sub">to {e.paidTo.code} · {e.paidTo.name}</small> : null}{e.reference ? <small className="sub">{e.reference}</small> : null}{e.cardFee ? <small className="sub">incl. card fee {amt(e.cardFee)}</small> : null}</td>
               <td className="n">{e.kind === "Refund" ? "−" : ""}{amt(e.amount)}</td>
               <td>{admin ? <DeleteEntry id={e.id} /> : null}</td>
             </tr>

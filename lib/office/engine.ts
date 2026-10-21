@@ -1,7 +1,7 @@
 // The back office's rules: every number the auction workbook calculated, in one place.
 // Pure functions (no database), so the same answers show on every page and the rules can be tested.
 import {
-  COD, UAE,
+  COD, DIRECT, UAE,
   type Adjustment, type CardLink, type Customer, type IntakeItem, type LedgerEntry, type OAuction, type OfficeData,
   type OfficeSettings, type OLot, type Seller, type SentLog
 } from "./types";
@@ -56,8 +56,44 @@ export type LotView = OLot & {
   vatFee: number;
   net: number;
   profit: number;
-  payout: "" | "Paid" | "Due to seller" | "Wait – buyer not paid";
+  payout: "" | "Paid" | "Due to seller" | "Seller owes us" | "Wait – buyer not paid";
+  /** In the demo (training) auction. */
+  demo: boolean;
+  /** What settling this lot with its seller would move: its net, less what the buyer paid the seller directly (negative = the seller owes us). */
+  toPay: number;
+  /** For the payout form: how this lot shares a direct payment with the seller's other lots on the same invoice. */
+  settle: SettleLot | null;
 };
+
+/** A consigned lot not yet settled with its seller, as the payout form needs it. */
+export type SettleLot = { id: string; lot_number: number; net: number; group: string; unapplied: number; groupUnpaid: number };
+
+/**
+ * The cash that moves for each lot when these lots are settled with their seller.
+ * A payment the buyer made straight to the seller ("unapplied" for that seller and invoice) comes off the lots of that invoice
+ * in lot order; the last lot of the invoice takes whatever is left, so it can go negative (the seller owes us the difference).
+ */
+export function settleCash(picked: SettleLot[]): Map<string, number> {
+  const out = new Map<string, number>();
+  const groups = new Map<string, SettleLot[]>();
+  for (const l of picked) {
+    const g = groups.get(l.group);
+    if (g) g.push(l);
+    else groups.set(l.group, [l]);
+  }
+  for (const ls of groups.values()) {
+    ls.sort((a, b) => a.lot_number - b.lot_number);
+    const finishing = ls.length >= ls[0].groupUnpaid;
+    let left = ls[0].unapplied;
+    ls.forEach((l, i) => {
+      const last = finishing && i === ls.length - 1;
+      const share = last ? left : Math.min(Math.max(left, 0), l.net);
+      left = r2(left - share);
+      out.set(l.id, r2(l.net - share));
+    });
+  }
+  return out;
+}
 
 function lotView(l: OLot, ctx: { auctions: Map<string, OAuction>; sellers: Map<string, Seller>; customers: Map<string, Customer>; s: OfficeSettings; today: string }): LotView {
   const auction = ctx.auctions.get(l.auction_id);
@@ -91,7 +127,8 @@ function lotView(l: OLot, ctx: { auctions: Map<string, OAuction>; sellers: Map<s
     invoiceNo: sold ? inv : null,
     invoiceKey: hasWinner && hammer > 0 && customer ? inv : null,
     reserveCheck, feePct, feeFixed, fee, vatFee, net, profit,
-    payout: "" // filled in once invoices are known
+    payout: "", // filled in once invoices are known
+    demo: !!auction?.demo, toPay: net, settle: null
   };
 }
 
@@ -107,6 +144,10 @@ export type LedgerView = LedgerEntry & {
   /** "Open" (the invoice exists), "Cancelled" (its lots were all withdrawn or returned), "Not found", or "" (no invoice). */
   order: "" | "Open" | "Cancelled" | "Not found";
   check: string;
+  /** The consignor the buyer paid directly (method DIRECT). */
+  paidTo: Seller | undefined;
+  /** Part of the demo (training) auction. */
+  demo: boolean;
 };
 
 export type InvoiceStatus = "Paid" | "Paid – fee to add" | "Refund due" | "Deposit paid" | "Part paid" | "COD – collect" | "Unpaid";
@@ -151,6 +192,10 @@ export type InvoiceView = {
   tray: number | null;
   note: string;
   adjustment: Adjustment | undefined;
+  /** Paid by the buyer straight to the consignor (inside paidDirect). */
+  paidToSeller: number;
+  /** In the demo (training) auction. */
+  demo: boolean;
 };
 
 export type CustomerView = Customer & {
@@ -169,7 +214,11 @@ export type SellerView = Seller & {
   hammer: number;
   fees: number;
   net: number;
+  /** Cash we paid the seller (less any they paid us back) when settling lots. */
   paidOut: number;
+  /** What buyers paid this seller directly. */
+  direct: number;
+  /** Still to pay the seller (negative = the seller owes us). */
   owed: number;
   profit: number;
 };
@@ -252,6 +301,8 @@ export function compute(data: OfficeData): Office {
   const byCode = new Map(data.customers.map(c => [c.code.toUpperCase(), c]));
   const rate = cardRate(s);
   const feeMethods = new Set((s.card_fee_methods || []).map(m => m.toLowerCase()));
+  const demoNos = new Set(data.auctions.filter(a => a.demo).map(a => a.number));
+  const demoInvoice = (no: string) => demoNos.size > 0 && demoNos.has(Number(/^TS(\d+)-/i.exec(no || "")?.[1]));
 
   // Lots, in auction then lot order.
   const lots = data.lots
@@ -334,7 +385,9 @@ export function compute(data: OfficeData): Office {
       deliveryStatus, sentAt: sentInv.best, lastReminder: rem.best, reminders: rem.count,
       lang: (customer.lang || s.wa_lang || "both") as InvoiceView["lang"],
       tray: trays.length ? Math.max(...trays) : null,
-      note: adj?.note || "", adjustment: adj
+      note: adj?.note || "", adjustment: adj,
+      paidToSeller: r2(pays.filter(e => e.method === DIRECT).reduce((t, e) => t + e.signed, 0)),
+      demo: !!first.auction?.demo
     });
   }
 
@@ -363,11 +416,37 @@ export function compute(data: OfficeData): Office {
   const invoicesByNo = new Map(invoices.map(i => [i.no, i]));
 
   // Seller payout state, now that invoices are known.
+  const sellerGroups = new Map<string, LotView[]>();
   for (const l of lots) {
     if (!l.sold || l.type !== "Consignment") continue;
     if (l.seller_paid_on) l.payout = "Paid";
     else if (!l.invoiceNo) l.payout = "Wait – buyer not paid";
     else l.payout = (invoicesByNo.get(l.invoiceNo)?.balance ?? 1) <= 0 ? "Due to seller" : "Wait – buyer not paid";
+    const k = `${l.seller_id}|${l.invoiceNo || l.id}`;
+    const g = sellerGroups.get(k);
+    if (g) g.push(l);
+    else sellerGroups.set(k, [l]);
+  }
+  // Buyers who paid the consignor directly: it comes off what settling that seller's lots on the invoice moves.
+  const directBy = new Map<string, number>();
+  for (const e of ledgerBase) {
+    if (e.kind !== "Payment" || e.method !== DIRECT || !e.paid_to_seller_id || !e.invoice_no) continue;
+    const k = `${e.paid_to_seller_id}|${e.invoice_no}`;
+    directBy.set(k, r2((directBy.get(k) || 0) + e.signed));
+  }
+  const cashOf = (l: LotView) => (l.payout_amount != null ? Number(l.payout_amount) : l.net);
+  for (const [k, ls] of sellerGroups) {
+    const applied = ls.filter(l => l.seller_paid_on).reduce((t, l) => t + (l.net - cashOf(l)), 0);
+    const unapplied = r2((directBy.get(k) || 0) - applied);
+    const unpaid = ls.filter(l => !l.seller_paid_on).sort((a, b) => a.lot_number - b.lot_number);
+    const settle = unpaid.map((l): SettleLot => ({ id: l.id, lot_number: l.lot_number, net: l.net, group: k, unapplied, groupUnpaid: unpaid.length }));
+    const cash = settleCash(settle);
+    unpaid.forEach((l, i) => {
+      l.settle = settle[i];
+      l.toPay = cash.get(l.id) ?? l.net;
+      if (l.payout === "Due to seller" && l.toPay < -0.005) l.payout = "Seller owes us";
+    });
+    for (const l of ls) if (l.seller_paid_on) l.toPay = 0;
   }
 
   // The payments list with its checks.
@@ -393,14 +472,17 @@ export function compute(data: OfficeData): Office {
     else if (order === "Cancelled" && held > 0.005) check = `Order cancelled: AED ${held.toFixed(2)} to refund`;
     else if (e.kind === "Refund" && order === "Open" && (invoicesByNo.get(e.invoice_no)?.balance || 0) > 0.005) check = "Refund leaves this invoice unpaid: check";
     else if (!e.customer_id && !e.invoice_no) check = "Choose the buyer";
+    else if (e.method === DIRECT && (e.kind !== "Payment" || !e.paid_to_seller_id)) check = "Paid to the seller directly: choose the seller (payments only)";
     else if (String(e.method).toLowerCase() === "cash" && n0(e.amount) >= n0(s.cash_alert) && n0(s.cash_alert) > 0) check = "Cash at or above the alert: check reporting";
-    return { ...e, customer, auctionNo, order, check };
+    const paidTo = e.paid_to_seller_id ? sellers.get(e.paid_to_seller_id) : undefined;
+    const demo = !!customer?.demo || demoInvoice(e.invoice_no) || !!paidTo?.demo;
+    return { ...e, customer, auctionNo, order, check, paidTo, demo };
   });
 
   // Buyers: what they won, owe, and the deposit they still hold.
   const customersOut: CustomerView[] = data.customers.map(c => {
-    const won = lots.filter(l => l.sold && l.winner_customer_id === c.id);
-    const mine = invoices.filter(i => i.customer.id === c.id);
+    const won = lots.filter(l => l.sold && l.winner_customer_id === c.id && (c.demo || !l.demo));
+    const mine = invoices.filter(i => i.customer.id === c.id && (c.demo || !i.demo));
     const deps = ledgerBase.filter(e => e.customer_id === c.id && e.kind === "Deposit");
     const depositsTaken = r2(deps.reduce((t, e) => t + n0(e.amount) - e.cardFee, 0));
     const depositsRefunded = r2(ledgerBase.filter(e => e.customer_id === c.id && e.kind === "Refund" && !e.invoice_no).reduce((t, e) => t + n0(e.amount), 0));
@@ -414,13 +496,14 @@ export function compute(data: OfficeData): Office {
 
   // Sellers: what sold, what they're owed.
   const sellersOut: SellerView[] = data.sellers.map(x => {
-    const mine = lots.filter(l => l.seller_id === x.id);
+    const mine = lots.filter(l => l.seller_id === x.id && (x.demo || !l.demo));
     const sold = mine.filter(l => l.sold);
     const net = r2(mine.reduce((t, l) => t + l.net, 0));
-    const paidOut = r2(mine.filter(l => l.payout === "Paid").reduce((t, l) => t + l.net, 0));
+    const paidOut = r2(mine.filter(l => l.payout === "Paid").reduce((t, l) => t + cashOf(l), 0));
+    const direct = r2(ledger.filter(e => e.paid_to_seller_id === x.id && e.method === DIRECT && e.kind === "Payment" && (x.demo || !e.demo)).reduce((t, e) => t + e.signed, 0));
     return {
       ...x, lotsEntered: mine.length, lotsSold: sold.length, hammer: r2(sold.reduce((t, l) => t + n0(l.hammer), 0)),
-      fees: r2(mine.reduce((t, l) => t + l.fee, 0)), net, paidOut, owed: r2(net - paidOut), profit: r2(mine.reduce((t, l) => t + l.profit, 0))
+      fees: r2(mine.reduce((t, l) => t + l.fee, 0)), net, paidOut, direct, owed: r2(net - paidOut - direct), profit: r2(mine.reduce((t, l) => t + l.profit, 0))
     };
   });
   const sellersById = new Map(sellersOut.map(x => [x.id, x]));
@@ -432,13 +515,14 @@ export function compute(data: OfficeData): Office {
   };
   const refunds: RefundDue[] = [];
   for (const i of invoices) {
+    if (i.demo) continue;
     if (i.balance < -0.005) {
       refunds.push({ source: "invoice", ref: i.no, auctionNo: i.auctionNo, customer: i.customer, why: "Paid more than the invoice (lot returned or overpaid)", amount: r2(-i.balance), paidBy: lastMethod(e => e.invoice_no === i.no && e.kind !== "Refund") });
     }
   }
   const seenCancelled = new Set<string>();
   for (const e of ledger) {
-    if (e.order !== "Cancelled" || seenCancelled.has(e.invoice_no)) continue;
+    if (e.order !== "Cancelled" || e.demo || seenCancelled.has(e.invoice_no)) continue;
     seenCancelled.add(e.invoice_no);
     const held = r2((byInvoice.get(e.invoice_no) || []).reduce((t, x) => t + (x.kind === "Deposit" ? 0 : x.signed), 0));
     if (held > 0.005) {
@@ -447,12 +531,12 @@ export function compute(data: OfficeData): Office {
     }
   }
   for (const c of customersOut) {
-    if (c.depositHeld > 0.005) refunds.push({ source: "deposit", ref: "Deposit", auctionNo: null, customer: c, why: "Deposit held, not used on an invoice", amount: c.depositHeld, paidBy: lastMethod(e => e.customer_id === c.id && e.kind === "Deposit") });
+    if (!c.demo && c.depositHeld > 0.005) refunds.push({ source: "deposit", ref: "Deposit", auctionNo: null, customer: c, why: "Deposit held, not used on an invoice", amount: c.depositHeld, paidBy: lastMethod(e => e.customer_id === c.id && e.kind === "Deposit") });
   }
 
   // Intake: where each consigned watch is now (its latest lot).
   const latestLot = new Map<string, LotView>();
-  for (const l of lots) if (l.intake_item_id) latestLot.set(l.intake_item_id, l);
+  for (const l of lots) if (l.intake_item_id && (!l.demo || l.seller?.demo)) latestLot.set(l.intake_item_id, l);
   const intake: IntakeView[] = data.intake
     .slice()
     .sort((a, b) => a.receipt_no.localeCompare(b.receipt_no) || a.position - b.position || a.item_id.localeCompare(b.item_id))
@@ -489,7 +573,7 @@ export function compute(data: OfficeData): Office {
         sellerFees: r2(ls.reduce((t, l) => t + l.fee, 0)), profit: r2(ls.reduce((t, l) => t + l.profit, 0)),
         invoices: invs.length, billed, collected, outstanding: r2(billed - collected),
         depositsApplied: r2(invs.reduce((t, i) => t + i.depositApplied, 0)),
-        owedToSellers: r2(ls.filter(l => l.payout !== "Paid").reduce((t, l) => t + l.net, 0)),
+        owedToSellers: r2(ls.filter(l => l.payout !== "Paid").reduce((t, l) => t + l.toPay, 0)),
         target: a.lot_target || n0(s.lot_target) || 100
       };
     });
@@ -497,12 +581,68 @@ export function compute(data: OfficeData): Office {
   return {
     data, today, lots, lotsById: new Map(lots.map(l => [l.id, l])), invoices, invoicesByNo, ledger,
     customers: customersOut, customersById, sellers: sellersOut, sellersById, refunds,
-    owing: invoices.filter(i => i.balance > 0 && i.paysBy !== COD),
+    owing: invoices.filter(i => i.balance > 0 && i.paysBy !== COD && !i.demo),
     intake, auctions: summaries
   };
 }
 
 // ───────────────────────────── small helpers for pages ─────────────────────────────
+
+/**
+ * The back office without the demo (training) auction: its lots, invoices and payments, and the demo buyers and sellers.
+ * The accounts and every money report are built from this.
+ */
+export function withoutDemo(d: OfficeData): OfficeData {
+  const demoAuctions = new Set(d.auctions.filter(a => a.demo).map(a => a.id));
+  const demoNos = new Set(d.auctions.filter(a => a.demo).map(a => a.number));
+  const demoCust = new Set(d.customers.filter(c => c.demo).map(c => c.id));
+  const demoSell = new Set(d.sellers.filter(x => x.demo).map(x => x.id));
+  if (!demoAuctions.size && !demoCust.size && !demoSell.size) return d;
+  const demoInv = (no: string) => demoNos.has(Number(/^TS(\d+)-/i.exec(no || "")?.[1]));
+  return {
+    ...d,
+    auctions: d.auctions.filter(a => !a.demo),
+    lots: d.lots.filter(l => !demoAuctions.has(l.auction_id)),
+    customers: d.customers.filter(c => !c.demo),
+    sellers: d.sellers.filter(x => !x.demo),
+    intake: d.intake.filter(i => !i.seller_id || !demoSell.has(i.seller_id)),
+    adjustments: d.adjustments.filter(a => !demoInv(a.invoice_no)),
+    ledger: d.ledger.filter(e => !(e.customer_id && demoCust.has(e.customer_id)) && !demoInv(e.invoice_no) && !(e.paid_to_seller_id && demoSell.has(e.paid_to_seller_id))),
+    sent: d.sent.filter(x => !demoInv(x.ref)),
+    cards: d.cards.filter(c => !demoInv(c.invoice_no) && !(c.customer_id && demoCust.has(c.customer_id)))
+  };
+}
+
+/** One lot of an auction, as the tray planner needs it. */
+export type TrayLot = { id: string; lot_number: number; winner: string | null; hammer: number | null; exception: string | null; tray: number | null };
+
+/**
+ * Trays for buyers who win more than one lot in an auction, so their watches go together.
+ * A buyer whose lots already have a tray keeps it for the rest; otherwise they get the next free number.
+ * Lots that already have a tray are never changed.
+ */
+export function planTrays(lots: TrayLot[]) {
+  const sold = lots.filter(l => l.winner && n0(l.hammer) > 0 && !l.exception).sort((a, b) => a.lot_number - b.lot_number);
+  const byWinner = new Map<string, TrayLot[]>();
+  for (const l of sold) {
+    const g = byWinner.get(l.winner!);
+    if (g) g.push(l);
+    else byWinner.set(l.winner!, [l]);
+  }
+  let max = lots.reduce((m, l) => Math.max(m, n0(l.tray)), 0);
+  const set: { id: string; tray: number }[] = [];
+  const trays: { winner: string; tray: number; lots: number[] }[] = [];
+  for (const [winner, ls] of byWinner) {
+    if (ls.length < 2) continue;
+    const missing = ls.filter(l => !(n0(l.tray) > 0));
+    if (!missing.length) continue;
+    const have = ls.map(l => n0(l.tray)).filter(t => t > 0);
+    const tray = have.length ? Math.min(...have) : ++max;
+    for (const l of missing) set.push({ id: l.id, tray });
+    trays.push({ winner, tray, lots: ls.map(l => l.lot_number) });
+  }
+  return { set, trays };
+}
 
 /** "AED 1,250" / "AED 1,250.50" */
 export const aed = (n: number | null | undefined) => {
@@ -513,14 +653,15 @@ export const aed = (n: number | null | undefined) => {
 /** "1,250" / "1,250.50" */
 export const amt = (n: number | null | undefined) => aed(n).slice(4);
 
-/** The next buyer code (B0001, B0002, …). */
-export function nextCustomerCode(customers: Pick<Customer, "code">[]) {
+/** The next buyer code (B0001, B0002, …); demo buyers get D0001, D0002, … */
+export function nextCustomerCode(customers: Pick<Customer, "code">[], prefix: "B" | "D" = "B") {
   let max = 0;
+  const re = prefix === "D" ? /^D(\d+)$/i : /^B(\d+)$/i;
   for (const c of customers) {
-    const m = /^B(\d+)$/i.exec(c.code);
+    const m = re.exec(c.code);
     if (m) max = Math.max(max, Number(m[1]));
   }
-  return `B${String(max + 1).padStart(4, "0")}`;
+  return `${prefix}${String(max + 1).padStart(4, "0")}`;
 }
 
 /** The next consignment receipt number (CR-0001, …) and item IDs (CR-0001-01, …). */

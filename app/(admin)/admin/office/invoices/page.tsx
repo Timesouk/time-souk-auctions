@@ -4,7 +4,7 @@ import { aed, amt, type InvoiceView } from "@/lib/office/engine";
 import { dateText } from "@/lib/office/messages";
 import { hoursSince, invoiceMessages } from "@/lib/office/view";
 import { COD } from "@/lib/office/types";
-import { AuctionPicker, LotKeys, Pill, SetupNeeded } from "@/components/office/bits";
+import { AuctionPicker, DemoNote, LotKeys, Pill, SetupNeeded } from "@/components/office/bits";
 import { WaButton } from "@/components/office/Wa";
 
 export const dynamic = "force-dynamic";
@@ -39,7 +39,8 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
   const a = all ? null : pickAuction(o, sp.a);
   const show = SHOWS.some(([k]) => k === sp.show) ? sp.show || "" : "";
   const s = o.data.settings;
-  const base = all ? o.invoices : o.invoices.filter(i => i.auction?.id === a?.id);
+  // "every auction" leaves out the demo (training) auction
+  const base = all ? o.invoices.filter(i => !i.demo) : o.invoices.filter(i => i.auction?.id === a?.id);
   const list = base.filter(i => pick(show, i));
   const gap = s.remind_gap_hours || 12;
   const href = (k: string, everything = all) => `/admin/office/invoices?${everything ? "all=1" : `a=${a?.number ?? ""}`}${k ? `&show=${k}` : ""}`;
@@ -57,6 +58,7 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
           <Link className="btn sm" href={all ? `/admin/office/invoices${show ? `?show=${show}` : ""}` : href(show, true)}>{all ? "One auction" : "Every auction"}</Link>
         </div>
       </div>
+      {!all && a?.demo ? <DemoNote /> : null}
       <div className="chips">
         {SHOWS.map(([k, label]) => {
           const n = base.filter(i => pick(k, i)).length;

@@ -1,10 +1,15 @@
 // Made-up records for preview mode (no Supabase): every name, number and handle here is fictional.
 import { DEFAULT_CHART } from "./chart";
-import { DEFAULT_SETTINGS, type Customer, type IntakeItem, type LedgerEntry, type OAuction, type OfficeData, type OLot, type Seller } from "./types";
+import { DEFAULT_SETTINGS, DIRECT, type Customer, type IntakeItem, type LedgerEntry, type OAuction, type OfficeData, type OLot, type Seller } from "./types";
+import { DEMO_WATCHES } from "./demo";
 
 const day = (now: number, offset: number) => new Date(now + 4 * 3600e3 + offset * 86400e3).toISOString().slice(0, 10);
 
-export function sampleOffice(now = Date.now()): OfficeData {
+/**
+ * `extras` adds what preview mode shows on top of the basic records (the tests use the basic ones):
+ * an Instagram-only auction, a buyer with two lots in one tray who paid the consignor directly for one, and a demo auction.
+ */
+export function sampleOffice(now = Date.now(), extras = false): OfficeData {
   const past = day(now, -3);
   const next = day(now, 4);
   const auctions: OAuction[] = [
@@ -62,6 +67,7 @@ export function sampleOffice(now = Date.now()): OfficeData {
     { id: "p2", seq: 2, entry_date: past, kind: "Deposit", customer_id: "cB0001", invoice_no: "", method: "Cash", amount: 5000, reference: "", received_by: "", notes: "", created_at: at(past) },
     { id: "p3", seq: 3, entry_date: past, kind: "Payment", customer_id: "cB0003", invoice_no: "TS001-B0003", method: "Card link (Ziina)", amount: 9476, reference: "", received_by: "", notes: "", created_at: at(past) }
   ];
+  if (extras) addExtras(now, auctions, lots, customers, sellers, ledger, mk, at);
   return {
     settings: { ...DEFAULT_SETTINGS, bank_name: "Sample Bank", bank_account: "SAMPLE ACCOUNT NAME", bank_iban: "AE00 0000 0000 0000 0000 000" },
     auctions, lots, customers, sellers, intake,
@@ -70,6 +76,42 @@ export function sampleOffice(now = Date.now()): OfficeData {
     sent: [{ id: 1, sent_at: at(past), ref: "TS001-B0002", name: "Layla Example", phone: "+971500000102", total: 11030, balance: 11030, file: "", kind: "Invoice", link: "" }],
     cards: [], messages: {}, now
   };
+}
+
+type Watch = [string, string, string, string, number, number | null, string, string | null, number | null];
+
+function addExtras(
+  now: number, auctions: OAuction[], lots: OLot[], customers: Customer[], sellers: Seller[], ledger: LedgerEntry[],
+  mk: (a: OAuction, i: number, w: Watch, played: boolean) => OLot, at: (d: string) => string
+) {
+  const a1 = auctions[0];
+  // auction 2 runs on Instagram only
+  auctions[1].instagram = true;
+  // B0006 wins a second lot: both go in tray 1. They paid the consignor (S001) directly for it, and us for the rest.
+  const extra = mk(a1, 8, ["Breitling", "Navitimer B01 43", "AB0121", "sS1", 3000, 3500, "Full set", "cB0006", 4000], true);
+  lots.push(extra);
+  for (const l of lots) if (l.auction_id === a1.id && l.winner_customer_id === "cB0006") l.tray = 1;
+  ledger.push(
+    { id: "p4", seq: 4, entry_date: a1.sale_date, kind: "Payment", customer_id: "cB0006", invoice_no: "TS001-B0006", method: DIRECT, amount: 4000, reference: "Transfer to the seller", received_by: "", notes: "", created_at: at(a1.sale_date), paid_to_seller_id: "sS1" },
+    { id: "p5", seq: 5, entry_date: a1.sale_date, kind: "Payment", customer_id: "cB0006", invoice_no: "TS001-B0006", method: "Bank transfer", amount: 3930, reference: "Sample transfer", received_by: "", notes: "", created_at: at(a1.sale_date) }
+  );
+  // the demo (training) auction, with its own demo sellers and buyer
+  const today = new Date(now + 4 * 3600e3).toISOString().slice(0, 10);
+  const demo: OAuction = { id: "a999", number: 999, sale_date: today, live_starts_at: `${today}T20:00:00+04:00`, status: "draft", pay_clock: null, office_notes: "", lot_target: 10, demo: true };
+  auctions.push(demo);
+  sellers.push(
+    { id: "sDC", code: "DEMO-C", name: "Demo consignor (training)", kind: "consignment", phone: "", instagram: "", email: "", id_checked: "", fee_pct: 7.5, fee_fixed: null, bank: "", iban: "", notes: "", demo: true },
+    { id: "sDO", code: "DEMO-O", name: "Demo own stock (training)", kind: "own", phone: "", instagram: "", email: "", id_checked: "", fee_pct: null, fee_fixed: null, bank: "", iban: "", notes: "", demo: true }
+  );
+  customers.push({
+    id: "cD0001", code: "D0001", instagram: "demo.buyer.one", full_name: "Demo Buyer One", phone: "", email: "", address: "", area: "Dubai", country: "", delivery: "",
+    usual_pay: "", id_checked: false, flag: "OK", notes: "", lang: "", profile_id: null, demo: true
+  });
+  DEMO_WATCHES.slice(0, 4).forEach(([brand, model, ref, , bp, , start, reserve, seller, cost], i) => {
+    const l = mk(demo, i, [brand, model, ref, seller === "DEMO-O" ? "sDO" : "sDC", start, reserve, bp, i === 0 ? "cD0001" : null, i === 0 ? 24000 : null], i === 0);
+    l.cost = cost;
+    lots.push(l);
+  });
 }
 
 /** Made-up accounting entries for preview mode: opening balances, an expense, a Ziina payout, owners' drawings. */

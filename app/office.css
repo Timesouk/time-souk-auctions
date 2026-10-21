@@ -37,13 +37,18 @@ table.lgrid { font-size: 13.5px; }
 table.lgrid thead th { position: sticky; top: 0; background: var(--card); z-index: 2; }
 table.lgrid td { padding: 4px 6px; vertical-align: middle; white-space: nowrap; }
 table.lgrid td.watch { white-space: normal; }
-table.lgrid td.watch { max-width: 240px; min-width: 160px; }
+table.lgrid td.wrap { white-space: normal; min-width: 110px; max-width: 150px; }
+table.lgrid td.watch { max-width: 240px; min-width: 140px; }
 table.lgrid td.watch small { display: block; font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); }
 table.lgrid input, table.lgrid select { font: inherit; font-size: 13.5px; padding: 5px 6px; border: 1.5px solid var(--line); background: #fffde6; border-radius: 0; width: 100%; min-width: 60px; }
 table.lgrid input[type="date"] { min-width: 130px; }
 table.lgrid input:focus, table.lgrid select:focus { outline: 2px solid var(--cyan); border-color: var(--ink); }
 table.lgrid td.n input { text-align: end; font-variant-numeric: tabular-nums; }
 table.lgrid tr.dirty td { background: #fff6bf; }
+/* the lots grid's buttons (Print slip, WhatsApp, Delete) stay in view while the grid scrolls sideways */
+table.lgrid td.acts, table.lgrid th.acts { position: sticky; right: 0; background: var(--card); box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.25), inset 0 -1.5px 0 var(--line); z-index: 1; }
+table.lgrid thead th.acts { z-index: 3; box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.25), inset 0 -2px 0 var(--ink); }
+table.lgrid tr.dirty td.acts { background: #fff6bf; }
 .savebar { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 10px 12px; background: var(--paper); border-top: 2px solid var(--line); font-weight: 700; font-size: 14px; color: var(--ink-2); }
 .savebar.on { background: var(--yellow); border-top-color: var(--ink); color: var(--ink); }
 .savebar span { margin-inline-end: auto; }

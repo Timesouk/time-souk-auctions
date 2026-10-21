@@ -675,3 +675,55 @@ test("accounting: 0007 can be run again safely", async () => {
   assert.equal((await one("select count(*)::int n from acct_accounts where code = '1100'")).n, 1);
   assert.ok((await one("select count(*)::int n from acct_entries")).n >= 2);
 });
+
+// ───────────── Instagram-only, demo auction, direct payments (0008) ─────────────
+
+test("0008: can be run again safely, and adds its columns", async () => {
+  const sql = readFileSync(new URL("0008_office_extras.sql", migrationsDir), "utf8").replace(/^notify pgrst.*$/m, "");
+  await db.exec(sql);
+  await db.exec(sql);
+  const cols = await all(
+    `select table_name || '.' || column_name c from information_schema.columns
+      where (table_name, column_name) in (('auctions','instagram'), ('auctions','demo'), ('customers','demo'), ('sellers','demo'), ('ledger','paid_to_seller_id'), ('lot_private','payout_amount'))`
+  );
+  assert.equal(cols.length, 6);
+});
+
+test("0008: an Instagram-only auction stays off the website; a demo auction can never be published", async () => {
+  const a = await makeAuction({ status: "draft" });
+  await db.query("update auctions set instagram = true where id = $1", [a]);
+  const lot = await makeLot(a);
+  // bidders see neither the auction nor its lots; staff see both
+  for (const [uid, sees] of [[A.id, 0], [S.id, 1]]) {
+    await db.query("select set_config('test.uid', $1, false)", [uid]);
+    await db.exec("set role authenticated");
+    try {
+      const seen = await one("select (select count(*)::int from auctions where id = $1) a, (select count(*)::int from lots where id = $2) l", [a, lot]);
+      assert.deepEqual([seen.a, seen.l], [sees, sees]);
+    } finally {
+      await db.exec("reset role");
+      await db.query("select set_config('test.uid', '', false)");
+    }
+  }
+  await expectError(bid(A, lot, 1000), "bidding_not_open");
+  // the demo auction
+  const d = (await one(
+    `insert into auctions (number, sale_date, prebid_opens_at, live_starts_at, status, demo)
+     values (999, current_date, now() - interval '1 day', now() + interval '1 hour', 'draft', true) returning id`
+  )).id;
+  await expectError(db.query("update auctions set status = 'published' where id = $1", [d]), "new row for relation \"auctions\" violates check constraint \"auctions_demo_draft\"");
+  await db.query("delete from auctions where id = $1", [d]);
+});
+
+test("0008: a payment to the seller directly names the seller, who can't be deleted while it exists", async () => {
+  const s = (await one("insert into sellers (code, name, kind) values ('S900', 'Test consignor', 'consignment') returning id")).id;
+  const c = (await one("insert into customers (code, instagram) values ('B9801', 'direct.buyer') returning id")).id;
+  await db.query(
+    "insert into ledger (kind, customer_id, invoice_no, method, amount, paid_to_seller_id) values ('Payment', $1, 'TS050-B9801', 'Paid to seller directly', 4000, $2)",
+    [c, s]
+  );
+  await expectError(db.query("delete from sellers where id = $1", [s]), "update or delete on table \"sellers\" violates");
+  await db.query("delete from ledger where customer_id = $1", [c]);
+  await db.query("delete from customers where id = $1", [c]);
+  await db.query("delete from sellers where id = $1", [s]);
+});

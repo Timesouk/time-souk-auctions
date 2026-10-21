@@ -9,7 +9,13 @@ import type { ManualKind } from "@/lib/office/types";
 import type { Result } from "../../actions";
 
 const ok = (message: string, id?: string): Result => ({ ok: true, message, id });
-const bad = (message: string): Result => ({ ok: false, message });
+/** A column added by 0008 missing means that update hasn't been run yet: say so plainly. */
+const bad = (message: string): Result => ({
+  ok: false,
+  message: /does not exist/.test(message) && /instagram|demo|paid_to_seller_id|payout_amount/.test(message)
+    ? "The back office needs one more database update: run supabase/migrations/0008_office_extras.sql in the Supabase SQL Editor."
+    : message
+});
 
 async function guard(fn: (staff: Staff) => Promise<Result>, admin = false): Promise<Result> {
   try {

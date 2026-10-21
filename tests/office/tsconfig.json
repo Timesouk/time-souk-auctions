@@ -24,6 +24,8 @@
     "../../lib/office/links.ts",
     "../../lib/office/status.ts",
     "../../lib/office/accounting.ts",
-    "../../lib/office/chart.ts"
+    "../../lib/office/chart.ts",
+    "../../lib/office/types.ts",
+    "../../lib/office/demo.ts"
   ]
 }

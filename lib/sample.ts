@@ -1,6 +1,6 @@
 // Example auction used in preview mode (no Supabase settings). Nothing here is saved anywhere.
 import type { Auction, BidRow, Lot, Settings } from "./types";
-import { addDays, dubaiInstant, nextSaturday, todayDubai } from "./format";
+import { AUCTION_TIME, addDays, dubaiInstant, sundayFrom, todayDubai } from "./format";
 
 export const SAMPLE_SETTINGS: Settings = {
   seller_fee: 7.5,
@@ -46,8 +46,8 @@ const PADDLES = [112, 104, 118, 103, 109, 121, 117, 110, 122, 108, 128, 101, 119
 
 export function sampleAuction(now = Date.now()): { auction: Auction; lots: Lot[] } {
   const today = todayDubai(now);
-  const sat = new Date(`${today}T00:00:00Z`).getUTCDay() === 6 ? today : nextSaturday(today);
-  const liveStarts = dubaiInstant(sat, "16:00");
+  const sat = sundayFrom(today);
+  const liveStarts = dubaiInstant(sat, AUCTION_TIME);
   const auction: Auction = {
     id: "sample-auction",
     number: 1,

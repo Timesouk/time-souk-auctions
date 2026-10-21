@@ -2,7 +2,7 @@ import Link from "next/link";
 import { loadOffice } from "@/lib/office/load";
 import { aed, amt, auctionDue } from "@/lib/office/engine";
 import { dateText } from "@/lib/office/messages";
-import { SetupNeeded } from "@/components/office/bits";
+import { AuctionState, SetupNeeded } from "@/components/office/bits";
 import { AuctionOfficeForm } from "@/components/office/forms2";
 import { dubaiStamp } from "@/components/office/DocHead";
 
@@ -14,14 +14,15 @@ export default async function OfficeSummary() {
   if (o instanceof Error) return <SetupNeeded error={o.message} />;
   const s = o.data.settings;
   const rows = o.auctions;
-  const tot = (f: (r: (typeof rows)[number]) => number) => rows.reduce((t, r) => t + f(r), 0);
+  // totals leave out the demo (training) auction
+  const tot = (f: (r: (typeof rows)[number]) => number) => rows.filter(r => !r.auction.demo).reduce((t, r) => t + f(r), 0);
   const pct = (x: number | null) => (x == null ? "" : `${Math.round(x * 100)}%`);
   return (
     <div className="stack" style={{ gap: 16 }}>
       <div className="adm-head">
         <div>
           <h1 className="disp">Auction summary</h1>
-          <p className="fine">Sales, profit and money from buyers for every auction. Figures update as results and payments are typed.</p>
+          <p className="fine">Sales, profit and money from buyers for every auction. Figures update as results and payments are typed. The demo auction is listed but left out of the totals.</p>
         </div>
       </div>
       <div className="stats">
@@ -46,7 +47,7 @@ export default async function OfficeSummary() {
                 const due = auctionDue(r.auction, s);
                 return (
                   <tr key={r.auction.id}>
-                    <td className="nowrap"><Link href={`/admin/office?a=${r.auction.number}`}>{r.auction.number} · {dateText(r.auction.sale_date, "EN")}</Link>{r.auction.status === "draft" ? <small className="sub">draft</small> : null}</td>
+                    <td className="nowrap"><Link href={`/admin/office?a=${r.auction.number}`}>{r.auction.number} · {dateText(r.auction.sale_date, "EN")}</Link>{r.auction.status !== "published" ? <AuctionState a={r.auction} /> : null}</td>
                     <td className="nowrap fine">{due ? dubaiStamp(due) : ""}</td>
                     <td className="n">{r.lots} / {r.target}</td>
                     <td className="n">{r.sold}</td>

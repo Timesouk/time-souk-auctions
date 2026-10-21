@@ -20,8 +20,12 @@ export function intakeRow(i: IntakeView): IntakeRow {
 /** Auctions a watch can go into: the coming ones first. */
 export function auctionChoices(o: Office) {
   const list = o.data.auctions.slice().sort((a, b) => b.number - a.number);
-  const coming = list.filter(a => a.sale_date >= o.today).reverse();
-  const past = list.filter(a => a.sale_date < o.today);
-  return [...coming, ...past].map(a => ({ id: a.id, label: `Auction ${a.number} · ${dateText(a.sale_date, "EN")}${a.sale_date < o.today ? " (past)" : ""}` }));
+  const real = list.filter(a => !a.demo);
+  const coming = real.filter(a => a.sale_date >= o.today).reverse();
+  const past = real.filter(a => a.sale_date < o.today);
+  // the demo (training) auction last: only demo sellers' watches can go in it
+  return [...coming, ...past, ...list.filter(a => a.demo)].map(a => ({
+    id: a.id, label: `Auction ${a.number} · ${dateText(a.sale_date, "EN")}${a.demo ? " (DEMO, training)" : a.sale_date < o.today ? " (past)" : ""}`
+  }));
 }
 

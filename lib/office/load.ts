@@ -2,7 +2,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { adminClient } from "../supabase/admin";
 import { IS_PREVIEW } from "../env";
-import { compute, type Office } from "./engine";
+import { compute, withoutDemo, type Office } from "./engine";
 import { sampleAccounting, sampleOffice } from "./sample";
 import { buildJournal, type Journal } from "./accounting";
 import {
@@ -56,7 +56,7 @@ export function toLot(r: LotRow): OLot {
     winner_customer_id: (p.winner_customer_id as string) || null, winner_text: String(p.winner_text || ""), hammer: n(p.hammer), underbidder: String(p.underbidder || ""),
     underbid: n(p.underbid), exception: (p.exception as OLot["exception"]) || null, delivery_status: String(p.delivery_status || ""), dispatched_on: (p.dispatched_on as string) || null,
     courier: String(p.courier || ""), seller_paid_on: (p.seller_paid_on as string) || null, payout_ref: String(p.payout_ref || ""), payout_account: String(p.payout_account || ""), office_notes: String(p.office_notes || ""),
-    tray: n(p.tray), slip_printed_at: (p.slip_printed_at as string) || null
+    tray: n(p.tray), slip_printed_at: (p.slip_printed_at as string) || null, payout_amount: n(p.payout_amount)
   };
 }
 
@@ -70,22 +70,34 @@ const nums = <T extends Record<string, unknown>>(rows: T[], keys: string[]) =>
     return o as T;
   });
 
+const NEEDS_0008 = "The back office needs one more database update: run supabase/migrations/0008_office_extras.sql in the Supabase SQL Editor, then reload this page.";
+
 /** All the back office's records, as one snapshot. */
 export async function loadOfficeData(): Promise<OfficeData> {
-  if (IS_PREVIEW) return sampleOffice();
+  if (IS_PREVIEW) return sampleOffice(Date.now(), true);
+  try {
+    return await loadLive();
+  } catch (e) {
+    const m = (e as Error).message || "";
+    if (/does not exist/.test(m) && /instagram|demo|paid_to_seller_id|payout_amount/.test(m)) throw new Error(NEEDS_0008);
+    throw e;
+  }
+}
+
+async function loadLive(): Promise<OfficeData> {
   const db = adminClient();
   const [settingsRow, auctions, lots, customers, sellers, intake, adjustments, ledger, sent, cards, messages] = await Promise.all([
     db.from("office_settings").select("*").eq("id", 1).maybeSingle().then(r => {
       if (r.error) throw new Error(r.error.code === "42P01" ? "The back office isn't set up yet: run supabase/migrations/0006_back_office.sql in the Supabase SQL Editor." : r.error.message);
       return r.data;
     }),
-    fetchAll<Record<string, unknown>>(db, "auctions", "id, number, sale_date, live_starts_at, status, pay_clock, office_notes, lot_target", "number"),
+    fetchAll<Record<string, unknown>>(db, "auctions", "id, number, sale_date, live_starts_at, status, pay_clock, office_notes, lot_target, instagram, demo", "number"),
     fetchAll<LotRow>(db, "lots", LOT_SELECT, "id"),
-    fetchAll<Customer>(db, "customers", "id, code, instagram, full_name, phone, email, address, area, country, delivery, usual_pay, id_checked, flag, notes, lang, profile_id", "code"),
-    fetchAll<Seller>(db, "sellers", "id, code, name, kind, phone, instagram, email, id_checked, fee_pct, fee_fixed, bank, iban, notes", "code"),
+    fetchAll<Customer>(db, "customers", "id, code, instagram, full_name, phone, email, address, area, country, delivery, usual_pay, id_checked, flag, notes, lang, profile_id, demo", "code"),
+    fetchAll<Seller>(db, "sellers", "id, code, name, kind, phone, instagram, email, id_checked, fee_pct, fee_fixed, bank, iban, notes, demo", "code"),
     fetchAll<IntakeItem>(db, "intake_items", "id, receipt_no, item_id, position, received_on, seller_id, brand, model, reference, serial, year, box_papers, condition, notes, reserve, start_price, fee_pct, fee_fixed, received_by, returned_on", "item_id"),
     fetchAll<Adjustment>(db, "invoice_adjustments", "invoice_no, delivery, pays_by, delivery_fee, discount, extra, extra_label, note", "invoice_no"),
-    fetchAll<LedgerEntry>(db, "ledger", "id, seq, entry_date, kind, customer_id, invoice_no, method, amount, reference, received_by, notes, created_at", "seq"),
+    fetchAll<LedgerEntry>(db, "ledger", "id, seq, entry_date, kind, customer_id, invoice_no, method, amount, reference, received_by, notes, created_at, paid_to_seller_id", "seq"),
     fetchAll<SentLog>(db, "sent_log", "id, sent_at, ref, name, phone, total, balance, file, kind, link", "id"),
     fetchAll<CardLink>(db, "card_links", "id, created_at, kind, invoice_no, lot_key, customer_id, name, amount, fee, card_amount, expires_at, ziina_id, url, status, checked_at, ledger_id", "created_at"),
     fetchAll<{ key: string; en: string | null; ar: string | null }>(db, "office_messages", "key, en, ar", "key")
@@ -96,7 +108,7 @@ export async function loadOfficeData(): Promise<OfficeData> {
     settings: toSettings(settingsRow),
     auctions: auctions.map(a => ({
       id: String(a.id), number: Number(a.number), sale_date: String(a.sale_date), live_starts_at: String(a.live_starts_at), status: a.status as OAuction["status"],
-      pay_clock: hm(a.pay_clock), office_notes: String(a.office_notes || ""), lot_target: n(a.lot_target)
+      pay_clock: hm(a.pay_clock), office_notes: String(a.office_notes || ""), lot_target: n(a.lot_target), instagram: !!a.instagram, demo: !!a.demo
     })),
     lots: lots.map(toLot),
     customers,
@@ -116,14 +128,18 @@ export async function loadOffice(): Promise<Office> {
   return compute(await loadOfficeData());
 }
 
-/** The auction a page shows: ?a=<number>, else the latest one with a date on or before today, else the latest. */
+/**
+ * The auction a page shows: ?a=<number> (the back office remembers the last one chosen, see middleware.ts),
+ * else the latest real one with a date on or before today, else the latest real one. The demo auction only when chosen.
+ */
 export function pickAuction(o: Office, a?: string) {
   const list = o.data.auctions.slice().sort((x, y) => y.number - x.number);
   if (a) {
     const hit = list.find(x => String(x.number) === a);
     if (hit) return hit;
   }
-  return list.find(x => x.sale_date <= o.today) || list[0] || null;
+  const real = list.filter(x => !x.demo);
+  return real.find(x => x.sale_date <= o.today) || real[0] || list[0] || null;
 }
 
 /** The accounting records (chart, typed entries, reconciliations). */
@@ -155,8 +171,9 @@ export async function loadAcctData(): Promise<AcctData> {
   };
 }
 
-/** Everything the accounting pages need: the back office, its accounting records and the journal. */
+/** Everything the accounting pages need: the back office (without the demo auction), its accounting records and the journal. */
 export async function loadAccounting(): Promise<{ o: Office; acct: AcctData; j: Journal }> {
-  const [o, acct] = await Promise.all([loadOffice(), loadAcctData()]);
+  const [data, acct] = await Promise.all([loadOfficeData(), loadAcctData()]);
+  const o = compute(withoutDemo(data));
   return { o, acct, j: buildJournal(o, acct) };
 }

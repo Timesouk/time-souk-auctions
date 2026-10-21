@@ -43,7 +43,7 @@ export default async function OfficeIntake({ searchParams }: { searchParams: Pro
       </div>
       <details className="panel-card" open={!o.intake.length}>
         <summary><strong>New intake</strong> <span className="fine">(a seller hands over watches)</span></summary>
-        <IntakeForm sellers={o.data.sellers.filter(x => x.kind !== "own").map(x => ({ id: x.id, label: `${x.code} · ${x.name}` }))} />
+        <IntakeForm sellers={o.data.sellers.filter(x => x.kind !== "own").map(x => ({ id: x.id, label: `${x.code} · ${x.name}${x.demo ? " (demo)" : ""}` }))} />
       </details>
       {receipts.length ? (
         <div className="row">

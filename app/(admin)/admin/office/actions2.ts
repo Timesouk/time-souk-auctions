@@ -5,7 +5,7 @@ import { adminClient } from "@/lib/supabase/admin";
 import { requireAdmin, requireStaff, type Staff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
 import { normIg, toE164 } from "@/lib/format";
-import { compute, invoiceNo, nextItemId, nextReceiptNo, r2 } from "@/lib/office/engine";
+import { compute, invoiceNo, nextItemId, nextReceiptNo, r2, settleCash, type LotView } from "@/lib/office/engine";
 import { fetchAll, loadOfficeData } from "@/lib/office/load";
 import { checkOpenCardLinks, makeCardLink } from "@/lib/office/cards";
 import { MESSAGE_KEYS } from "@/lib/office/messages";
@@ -14,7 +14,13 @@ import type { Result } from "../actions";
 import { booksClosedUpTo, closedMessage } from "@/lib/office/lock";
 
 const ok = (message: string, id?: string): Result => ({ ok: true, message, id });
-const bad = (message: string): Result => ({ ok: false, message });
+/** A column added by 0008 missing means that update hasn't been run yet: say so plainly. */
+const bad = (message: string): Result => ({
+  ok: false,
+  message: /does not exist/.test(message) && /instagram|demo|paid_to_seller_id|payout_amount/.test(message)
+    ? "The back office needs one more database update: run supabase/migrations/0008_office_extras.sql in the Supabase SQL Editor."
+    : message
+});
 
 async function guard(fn: (staff: Staff) => Promise<Result>, admin = false): Promise<Result> {
   try {
@@ -87,20 +93,30 @@ export async function saveSeller(input: SellerInput) {
   });
 }
 
-/** Marks sold lots as paid out to their seller. */
+/**
+ * Settles sold lots with their seller. Each lot remembers the cash that moved: its net, less anything the buyer paid
+ * the seller directly (which can leave the seller owing us the difference: a negative amount, money in).
+ */
 export async function markSellerPaid(input: { lotIds: string[]; date: string; ref: string; account?: string }) {
   return guard(async () => {
     if (!input.lotIds?.length) return bad("Choose the lots paid.");
     const date = ymd(input.date) || today();
     const lock = await booksClosedUpTo();
     if (lock && date <= lock) return bad(closedMessage(lock));
-    const { error } = await adminClient()
-      .from("lot_private")
-      .update({ seller_paid_on: date, payout_ref: str(input.ref, 80), ...(input.account ? { payout_account: str(input.account, 6) } : {}), updated_at: new Date().toISOString() })
-      .in("lot_id", input.lotIds.slice(0, 500));
-    if (error) return bad(error.message);
+    const o = compute(await loadOfficeData());
+    const picked = input.lotIds.slice(0, 500).map(id => o.lotsById.get(id)).filter((l): l is LotView => !!l && l.sold && l.type === "Consignment" && !l.seller_paid_on);
+    if (!picked.length) return bad("Those lots are already settled (refresh the page).");
+    const cash = settleCash(picked.map(l => l.settle).filter((x): x is NonNullable<LotView["settle"]> => !!x));
+    const db = adminClient();
+    const base = { seller_paid_on: date, payout_ref: str(input.ref, 80), ...(input.account ? { payout_account: str(input.account, 6) } : {}), updated_at: new Date().toISOString() };
+    for (const l of picked) {
+      const { error } = await db.from("lot_private").update({ ...base, payout_amount: cash.get(l.id) ?? l.net }).eq("lot_id", l.id);
+      if (error) return bad(error.message);
+    }
     refresh();
-    return ok(`${input.lotIds.length} lot${input.lotIds.length === 1 ? "" : "s"} marked as paid to the seller.`);
+    const total = r2(picked.reduce((t, l) => t + (cash.get(l.id) ?? l.net), 0));
+    const n = `${picked.length} lot${picked.length === 1 ? "" : "s"}`;
+    return ok(total >= 0 ? `${n} settled: AED ${total.toLocaleString("en-US")} paid to the seller.` : `${n} settled: the seller paid us AED ${(-total).toLocaleString("en-US")}.`);
   });
 }
 
@@ -192,12 +208,15 @@ export async function addToAuction(input: { itemIds: string[]; auctionId: string
   return guard(async () => {
     const db = adminClient();
     if (!input.itemIds?.length) return bad("Choose the watches.");
-    const { data: auction } = await db.from("auctions").select("id, number").eq("id", input.auctionId).maybeSingle();
+    const { data: auction } = await db.from("auctions").select("id, number, demo").eq("id", input.auctionId).maybeSingle();
     if (!auction) return bad("Choose the auction.");
     const o = compute(await loadOfficeData());
     const items = o.intake.filter(i => input.itemIds.includes(i.id));
     const ready = items.filter(i => i.status === "In stock" || /: in stock$/.test(i.status));
     if (!ready.length) return bad("None of those watches is in stock (already in an auction, sold or returned).");
+    if (ready.some(i => !!i.seller?.demo !== !!auction.demo)) {
+      return bad(auction.demo ? "Only the demo sellers' watches go in the demo auction." : "Demo sellers' watches only go in the demo auction.");
+    }
     const { data: last } = await db.from("lots").select("lot_number").eq("auction_id", auction.id).order("lot_number", { ascending: false }).limit(1).maybeSingle();
     let n = last?.lot_number || 0;
     const added: string[] = [];
@@ -231,6 +250,8 @@ export async function addToAuction(input: { itemIds: string[]; auctionId: string
 
 // ───────────────────────────── card payment links ─────────────────────────────
 
+const NO_DEMO_CARDS = "Card links are switched off for the demo auction and demo buyers: they would be real Ziina payment links.";
+
 /** A Ziina card link for an invoice's balance, some lots, or a deposit. Its URL comes back in `id`. */
 export async function createCardLink(input: { kind: "Invoice" | "Lot" | "Deposit"; invoice_no?: string; lot_ids?: string[]; customer_id?: string; amount?: string }) {
   return guard(async () => {
@@ -240,6 +261,7 @@ export async function createCardLink(input: { kind: "Invoice" | "Lot" | "Deposit
     if (input.kind === "Invoice") {
       const inv = o.invoicesByNo.get(str(input.invoice_no, 40).toUpperCase());
       if (!inv) return bad("Unknown invoice.");
+      if (inv.demo || inv.customer.demo) return bad(NO_DEMO_CARDS);
       if (inv.balance <= 0) return bad("This invoice is paid.");
       const link = await makeCardLink({
         kind: "Invoice", invoiceNo: inv.no, lotKey: inv.lots.map(l => l.key).join(", "), customerId: inv.customer.id, name: inv.customer.full_name || inv.customer.code,
@@ -252,6 +274,7 @@ export async function createCardLink(input: { kind: "Invoice" | "Lot" | "Deposit
       const lots = o.lots.filter(l => (input.lot_ids || []).includes(l.id) && l.sold && l.customer);
       if (!lots.length) return bad("Choose sold lots with a buyer.");
       if (new Set(lots.map(l => l.customer!.id)).size > 1) return bad("Those lots have different buyers.");
+      if (lots.some(l => l.demo || l.customer?.demo)) return bad(NO_DEMO_CARDS);
       const amt = r2(lots.reduce((t, l) => t + (l.hammer || 0), 0));
       const card = r2(amt * (1 + rate));
       const c = lots[0].customer!;
@@ -265,6 +288,7 @@ export async function createCardLink(input: { kind: "Invoice" | "Lot" | "Deposit
     const c = o.data.customers.find(x => x.id === input.customer_id);
     const amt = amount(input.amount);
     if (!c) return bad("Choose the buyer.");
+    if (c.demo) return bad(NO_DEMO_CARDS);
     if (!amt || amt <= 0) return bad("Type the deposit amount.");
     const card = r2(amt * (1 + rate));
     const link = await makeCardLink({ kind: "Deposit", invoiceNo: "", lotKey: "", customerId: c.id, name: c.full_name || c.code, amount: amt, cardAmount: card, expiresAt: null, what: `Deposit, buyer ${c.code}` });
@@ -281,6 +305,7 @@ export async function savePastedLink(input: { invoice_no: string; url: string; c
     const o = compute(await loadOfficeData());
     const inv = o.invoicesByNo.get(str(input.invoice_no, 40).toUpperCase());
     if (!inv) return bad("Unknown invoice.");
+    if (inv.demo) return bad(NO_DEMO_CARDS);
     const card = amount(input.card_amount) || inv.cardAmount;
     const { error } = await adminClient().from("card_links").insert({
       kind: "Invoice", invoice_no: inv.no, lot_key: inv.lots.map(l => l.key).join(", "), customer_id: inv.customer.id, name: inv.customer.full_name || inv.customer.code,

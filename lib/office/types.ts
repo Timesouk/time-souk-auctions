@@ -80,7 +80,23 @@ export type OAuction = {
   pay_clock: string | null;
   office_notes: string;
   lot_target: number | null;
+  /** Published for the Instagram live (the website shows it only when status is "published"). */
+  instagram?: boolean;
+  /** The training auction: never on the website, kept out of the accounts and totals. */
+  demo?: boolean;
 };
+
+/** Where an auction is: what staff see next to its number. */
+export type AuctionState = "Demo" | "Draft" | "Instagram only" | "Website + Instagram" | "Closed";
+export function auctionState(a: Pick<OAuction, "status" | "instagram" | "demo">): AuctionState {
+  if (a.demo) return "Demo";
+  if (a.status === "closed") return "Closed";
+  if (a.status === "published") return "Website + Instagram";
+  return a.instagram ? "Instagram only" : "Draft";
+}
+
+/** The training auction's number (lots 999-01…, invoices TS999-D0001). */
+export const DEMO_AUCTION_NO = 999;
 
 export const EXCEPTIONS = ["Withdrawn", "Buyer defaulted", "Returned by buyer"] as const;
 export type LotException = (typeof EXCEPTIONS)[number];
@@ -89,6 +105,8 @@ export const DELIVERY_STATUSES = ["Packed", "With courier", "Delivered", "Collec
 export const BOX_PAPERS = ["Full set", "Watch + box", "Watch + papers", "Watch only"] as const;
 export const CONDITIONS = ["Unworn", "Excellent", "Very good", "Good", "Fair"] as const;
 export const PAY_METHODS = ["Bank transfer", "Cash", "Card link (Ziina)", "Tabby", "Tamara", "Cash on delivery", "Other"] as const;
+/** A buyer who paid the consignor straight to their account: counts as paid on the invoice, and as money the seller has already had. */
+export const DIRECT = "Paid to seller directly";
 export const COD = "Cash on delivery";
 export const UAE = "United Arab Emirates";
 export const COUNTRIES = [UAE, "Oman", "Saudi Arabia", "Bahrain", "Kuwait", "Qatar", "Other"] as const;
@@ -142,6 +160,8 @@ export type OLot = {
   office_notes: string;
   tray: number | null;
   slip_printed_at: string | null;
+  /** Cash that moved when the seller was settled (+ we paid them, − they paid us); null = the lot's net. */
+  payout_amount?: number | null;
 };
 
 export type Customer = {
@@ -164,6 +184,8 @@ export type Customer = {
   /** "" = Settings */
   lang: "" | Lang3;
   profile_id: string | null;
+  /** A demo buyer (training): only wins lots in the demo auction. */
+  demo?: boolean;
 };
 
 export type Seller = {
@@ -180,6 +202,8 @@ export type Seller = {
   bank: string;
   iban: string;
   notes: string;
+  /** A demo seller (training). */
+  demo?: boolean;
 };
 
 export type IntakeItem = {
@@ -230,6 +254,8 @@ export type LedgerEntry = {
   received_by: string;
   notes: string;
   created_at: string;
+  /** The consignor who received this payment straight from the buyer (method DIRECT). */
+  paid_to_seller_id?: string | null;
 };
 
 export type SentLog = {
