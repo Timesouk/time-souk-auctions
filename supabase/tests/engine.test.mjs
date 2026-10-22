@@ -566,3 +566,184 @@ test("staff can read private lot data through row security", async () => {
     await db.query("select set_config('test.uid', '', false)");
   }
 });
+
+// ───────────── back office (0006) ─────────────
+
+test("back office: staff-only tables, bidders see nothing and nobody writes from the browser", async () => {
+  const c = await one("insert into customers (code, instagram, full_name) values ('B9001', 'test.buyer', 'Test Buyer') returning id");
+  await db.query("insert into ledger (kind, customer_id, invoice_no, method, amount) values ('Payment', $1, 'TS001-B9001', 'Cash', 500)", [c.id]);
+  for (const [uid, sees] of [[A.id, 0], [S.id, 1]]) {
+    await db.query("select set_config('test.uid', $1, false)", [uid]);
+    await db.exec("set role authenticated");
+    try {
+      assert.equal((await all("select id from customers where code = 'B9001'")).length, sees);
+      assert.equal((await all("select id from ledger where invoice_no = 'TS001-B9001'")).length, sees);
+      assert.equal((await all("select id from office_settings")).length, sees);
+      await expectError(db.query("insert into ledger (kind, method, amount) values ('Deposit', 'Cash', 1)"), "permission denied");
+      await expectError(db.query("update customers set full_name = 'x'"), "permission denied");
+    } finally {
+      await db.exec("reset role");
+      await db.query("select set_config('test.uid', '', false)");
+    }
+  }
+});
+
+test("back office: checks on amounts and kinds; workbook rows are matched, not doubled", async () => {
+  await expectError(db.query("insert into ledger (kind, method, amount) values ('Payment', 'Cash', 0)"), "new row for relation \"ledger\" violates check constraint");
+  await expectError(db.query("insert into ledger (kind, method, amount) values ('Gift', 'Cash', 5)"), "new row for relation \"ledger\" violates check constraint");
+  const up = "insert into ledger (import_ref, kind, method, amount) values ('wb:pay:7', 'Deposit', 'Cash', $1) on conflict (import_ref) do update set amount = excluded.amount";
+  await db.query(up, [100]);
+  await db.query(up, [150]);
+  const rows = await all("select amount from ledger where import_ref = 'wb:pay:7'");
+  assert.equal(rows.length, 1);
+  assert.equal(Number(rows[0].amount), 150);
+  const s = await one("select brand_name, fee_pct, hours_to_pay, card_fee_methods from office_settings where id = 1");
+  assert.equal(s.brand_name, "DXB Watch × The Time Souk");
+  assert.equal(Number(s.fee_pct), 7.5);
+  assert.deepEqual(s.card_fee_methods, ["Card link (Ziina)"]);
+  assert.equal((await one("select kind from sellers where code = 'TS'")).kind, "own");
+});
+
+test("back office: 0006 can be run again safely", async () => {
+  const sql = readFileSync(new URL("0006_back_office.sql", migrationsDir), "utf8");
+  await db.exec(sql.replace(/^notify pgrst.*$/m, ""));
+  await db.exec(sql.replace(/^notify pgrst.*$/m, ""));
+  assert.equal((await one("select count(*)::int n from office_settings")).n, 1);
+  assert.equal((await one("select count(*)::int n from sellers where code = 'TS'")).n, 1);
+  assert.equal((await one("select count(*)::int n from customers where code = 'B9001'")).n, 1);
+});
+
+// ───────────── accounting (0007) ─────────────
+
+const post = (entry, lines) => one("select acct_post($1::jsonb, $2::jsonb) as id", [JSON.stringify(entry), JSON.stringify(lines)]).then(r => r.id);
+
+test("accounting: balanced entries only, from known accounts", async () => {
+  const id = await post({ entry_date: "2026-10-20", kind: "expense", memo: "Courier", payee: "Aramex" }, [
+    { account_code: "6010", debit: 95.24 },
+    { account_code: "1300", debit: 4.76 },
+    { account_code: "1020", credit: 100 }
+  ]);
+  const lines = await all("select account_code, debit::float, credit::float from acct_lines where entry_id = $1 order by id", [id]);
+  assert.equal(lines.length, 3);
+  assert.equal((await one("select kind from acct_entries where id = $1", [id])).kind, "expense");
+  await expectError(post({ entry_date: "2026-10-20" }, [{ account_code: "6010", debit: 10 }, { account_code: "1020", credit: 9 }]), "acct: debits");
+  await expectError(post({ entry_date: "2026-10-20" }, [{ account_code: "6010", debit: 10 }]), "acct: an entry needs");
+  await expectError(post({ entry_date: "2026-10-20" }, [{ account_code: "9999", debit: 10 }, { account_code: "1020", credit: 10 }]), "acct: account 9999");
+  await expectError(post({ entry_date: "2026-10-20" }, [{ account_code: "6010", debit: 10, credit: 10 }, { account_code: "1020", credit: 10 }]), "acct: each line");
+  await expectError(post({ entry_date: "2026-10-20", kind: "gift" }, [{ account_code: "6010", debit: 10 }, { account_code: "1020", credit: 10 }]), "new row for relation \"acct_entries\" violates check constraint");
+  // nothing half-saved from the failures
+  assert.equal((await one("select count(*)::int n from acct_entries")).n, 1);
+});
+
+test("accounting: closed books refuse new and voided entries on or before the date", async () => {
+  const id = await post({ entry_date: "2026-09-30" }, [{ account_code: "3100", debit: 500 }, { account_code: "1010", credit: 500 }]);
+  await db.query("update office_settings set acct_lock_date = '2026-09-30' where id = 1");
+  try {
+    await expectError(post({ entry_date: "2026-09-30" }, [{ account_code: "6010", debit: 1 }, { account_code: "1020", credit: 1 }]), "acct: the books are closed");
+    await expectError(db.query("select acct_void($1, 'x')", [id]), "acct: the books are closed");
+    await post({ entry_date: "2026-10-01" }, [{ account_code: "6010", debit: 1 }, { account_code: "1020", credit: 1 }]);
+  } finally {
+    await db.query("update office_settings set acct_lock_date = null where id = 1");
+  }
+  await db.query("select acct_void($1, 'typed twice')", [id]);
+  assert.equal((await one("select void from acct_entries where id = $1", [id])).void, true);
+});
+
+test("accounting: staff read, bidders see nothing, nobody posts from the browser", async () => {
+  for (const [uid, sees] of [[A.id, 0], [S.id, 1]]) {
+    await db.query("select set_config('test.uid', $1, false)", [uid]);
+    await db.exec("set role authenticated");
+    try {
+      assert.equal((await all("select code from acct_accounts where code = '1020'")).length, sees);
+      assert.equal((await all("select id from acct_entries limit 1")).length, sees);
+      await expectError(post({ entry_date: "2026-10-21" }, [{ account_code: "6010", debit: 1 }, { account_code: "1020", credit: 1 }]), "permission denied");
+      await expectError(db.query("insert into acct_accounts (code, name, type) values ('7777', 'x', 'expense')"), "permission denied");
+    } finally {
+      await db.exec("reset role");
+      await db.query("select set_config('test.uid', '', false)");
+    }
+  }
+  const s = await one("select acct_methods->>'Cash' cash, acct_payout_default from office_settings where id = 1");
+  assert.equal(s.cash, "1010");
+  assert.equal(s.acct_payout_default, "1020");
+});
+
+test("accounting: 0007 can be run again safely", async () => {
+  const sql = readFileSync(new URL("0007_accounting.sql", migrationsDir), "utf8").replace(/^notify pgrst.*$/m, "");
+  await db.exec(sql);
+  await db.exec(sql);
+  assert.equal((await one("select count(*)::int n from acct_accounts where code = '1100'")).n, 1);
+  assert.ok((await one("select count(*)::int n from acct_entries")).n >= 2);
+});
+
+// ───────────── Instagram-only, demo auction, direct payments (0008) ─────────────
+
+test("0008: can be run again safely, and adds its columns", async () => {
+  const sql = readFileSync(new URL("0008_office_extras.sql", migrationsDir), "utf8").replace(/^notify pgrst.*$/m, "");
+  await db.exec(sql);
+  await db.exec(sql);
+  const cols = await all(
+    `select table_name || '.' || column_name c from information_schema.columns
+      where (table_name, column_name) in (('auctions','instagram'), ('auctions','demo'), ('customers','demo'), ('sellers','demo'), ('ledger','paid_to_seller_id'), ('lot_private','payout_amount'))`
+  );
+  assert.equal(cols.length, 6);
+});
+
+test("0008: an Instagram-only auction stays off the website; a demo auction can never be published", async () => {
+  const a = await makeAuction({ status: "draft" });
+  await db.query("update auctions set instagram = true where id = $1", [a]);
+  const lot = await makeLot(a);
+  // bidders see neither the auction nor its lots; staff see both
+  for (const [uid, sees] of [[A.id, 0], [S.id, 1]]) {
+    await db.query("select set_config('test.uid', $1, false)", [uid]);
+    await db.exec("set role authenticated");
+    try {
+      const seen = await one("select (select count(*)::int from auctions where id = $1) a, (select count(*)::int from lots where id = $2) l", [a, lot]);
+      assert.deepEqual([seen.a, seen.l], [sees, sees]);
+    } finally {
+      await db.exec("reset role");
+      await db.query("select set_config('test.uid', '', false)");
+    }
+  }
+  await expectError(bid(A, lot, 1000), "bidding_not_open");
+  // the demo auction
+  const d = (await one(
+    `insert into auctions (number, sale_date, prebid_opens_at, live_starts_at, status, demo)
+     values (999, current_date, now() - interval '1 day', now() + interval '1 hour', 'draft', true) returning id`
+  )).id;
+  await expectError(db.query("update auctions set status = 'published' where id = $1", [d]), "new row for relation \"auctions\" violates check constraint \"auctions_demo_draft\"");
+  await db.query("delete from auctions where id = $1", [d]);
+});
+
+test("0008: a payment to the seller directly names the seller, who can't be deleted while it exists", async () => {
+  const s = (await one("insert into sellers (code, name, kind) values ('S900', 'Test consignor', 'consignment') returning id")).id;
+  const c = (await one("insert into customers (code, instagram) values ('B9801', 'direct.buyer') returning id")).id;
+  await db.query(
+    "insert into ledger (kind, customer_id, invoice_no, method, amount, paid_to_seller_id) values ('Payment', $1, 'TS050-B9801', 'Paid to seller directly', 4000, $2)",
+    [c, s]
+  );
+  await expectError(db.query("delete from sellers where id = $1", [s]), "update or delete on table \"sellers\" violates");
+  await db.query("delete from ledger where customer_id = $1", [c]);
+  await db.query("delete from customers where id = $1", [c]);
+  await db.query("delete from sellers where id = $1", [s]);
+});
+
+test("the lots → auctions link has the name the back office's queries use (lots and auctions are linked twice)", async () => {
+  const r = await all("select conname from pg_constraint where conrelid = 'public.lots'::regclass and confrelid = 'public.auctions'::regclass");
+  assert.deepEqual(r.map(x => x.conname), ["lots_auction_id_fkey"]);
+  const back = await all("select conname from pg_constraint where conrelid = 'public.auctions'::regclass and confrelid = 'public.lots'::regclass");
+  assert.equal(back.length, 1); // block_lot_id: why a plain auctions(...) embed is ambiguous
+});
+
+test("deleting an auction takes its lots with it; intake watches stay, ready for another auction", async () => {
+  const a = await makeAuction({ status: "draft" });
+  const lot = await makeLot(a);
+  const s = (await one("insert into sellers (code, name) values ('S950', 'Delete test') returning id")).id;
+  const it = (await one("insert into intake_items (receipt_no, item_id, position, seller_id, brand) values ('CR-0950', 'CR-0950-01', 1, $1, 'Rolex') returning id", [s])).id;
+  await db.query("update lot_private set intake_item_id = $1, seller_id = $2 where lot_id = $3", [it, s, lot]);
+  await db.query("delete from auctions where id = $1", [a]);
+  const left = await one("select (select count(*)::int from lots where id = $1) l, (select count(*)::int from lot_private where lot_id = $1) p, (select count(*)::int from intake_items where id = $2) i", [lot, it]);
+  assert.deepEqual([left.l, left.p, left.i], [0, 0, 1]);
+  await db.query("delete from intake_items where id = $1", [it]);
+  await db.query("delete from sellers where id = $1", [s]);
+});

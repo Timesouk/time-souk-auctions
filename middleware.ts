@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 const LOCALES = ["en", "ar"];
+/** Back office pages that show one auction (see components/office/OfficeNav.tsx). */
+const OFFICE_PER_AUCTION = new Set(["/admin/office", "/admin/office/lots", "/admin/office/invoices", "/admin/office/statements", "/admin/office/dispatch", "/admin/office/runsheet", "/admin/office/slips"]);
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -17,6 +19,18 @@ export async function middleware(req: NextRequest) {
     const url = req.nextUrl.clone();
     url.pathname = `/${locale}${pathname === "/" ? "" : pathname}`;
     return NextResponse.redirect(url);
+  }
+
+  // Back office: remember the auction last chosen (?a=99), so moving between pages never jumps to another auction.
+  const OFFICE_A = "office_a";
+  const chosen = isAdmin && pathname.startsWith("/admin/office") ? req.nextUrl.searchParams.get("a") : null;
+  if (isAdmin && !chosen && req.method === "GET" && OFFICE_PER_AUCTION.has(pathname)) {
+    const saved = req.cookies.get(OFFICE_A)?.value;
+    if (saved && /^\d{1,6}$/.test(saved)) {
+      const url = req.nextUrl.clone();
+      url.searchParams.set("a", saved);
+      return NextResponse.redirect(url);
+    }
   }
 
   let res = NextResponse.next({ request: req });
@@ -38,6 +52,9 @@ export async function middleware(req: NextRequest) {
     await supabase.auth.getUser();
   }
 
+  if (chosen && /^\d{1,6}$/.test(chosen) && req.cookies.get(OFFICE_A)?.value !== chosen) {
+    res.cookies.set(OFFICE_A, chosen, { path: "/admin", maxAge: 60 * 60 * 24 * 30, sameSite: "lax", httpOnly: true });
+  }
   if (LOCALES.includes(first) && req.cookies.get("ts_locale")?.value !== first) {
     res.cookies.set("ts_locale", first, { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
   }

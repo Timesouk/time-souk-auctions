@@ -100,6 +100,16 @@ export function nextSaturday(fromYmd: string) {
   return d;
 }
 
+/** The auction day: Sunday. The first Sunday on or after this date. */
+export function sundayFrom(ymd: string) {
+  let d = ymd;
+  while (new Date(`${d}T00:00:00Z`).getUTCDay() !== 0) d = addDays(d, 1);
+  return d;
+}
+
+/** The usual live time: 8 pm Dubai. */
+export const AUCTION_TIME = "20:00";
+
 /** UAE mobile numbers: 05x xxx xxxx → +9715x xxx xxxx. Returns E.164 or "". */
 export function toE164(raw: string) {
   let d = String(raw || "").replace(/[^\d+]/g, "");

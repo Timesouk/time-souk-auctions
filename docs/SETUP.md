@@ -45,9 +45,12 @@ These involve approvals by other companies. Start them now and carry on with the
    Then `supabase/migrations/0003_any_amount_cod_address.sql` (bid any amount, cash on delivery, delivery addresses). Run it **after** 0002.
    Then `supabase/migrations/0004_cod_uae_only.sql` (cash on delivery for UAE deliveries only). Run it **after** 0003.
    Then `supabase/migrations/0005_optional_estimates_zero_start.sql` (optional estimates, AED 0 starting bids, staff logins, one admin). Run it **after** 0004.
+   Then `supabase/migrations/0006_back_office.sql` (the back office: buyers, sellers, intake, consolidated invoices, payments, card links). Run it **after** 0005.
+   Then `supabase/migrations/0007_accounting.sql` (accounting: chart of accounts, entries, reconciliation, closing the books). Run it **after** 0006.
+   Then `supabase/migrations/0008_office_extras.sql` (Instagram-only auctions, the demo auction for training, buyers who pay the consignor directly). Run it **after** 0007.
 4. Check **Table Editor**: you should see tables such as `auctions`, `lots`, `bids`, `invoices`, `profiles`.
 
-> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0005 are safe to run again.
+> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0008 are safe to run again. If Supabase shows **Potential issues detected** before running one, that's expected: the "destructive" lines only remove an old rule and add it straight back, and no data is deleted. Press **Run and enable RLS**.
 
 ### 1.3 Copy the API keys into Vercel later
 You'll need these three values in Part 3. Find them in **Project Settings → API Keys** (and **Project Settings → Data API** for the URL):
@@ -86,7 +89,7 @@ Don't copy them anywhere else; leave this tab open and paste them straight into 
 4. Custom email sending (so codes come from your domain and aren't capped at a few per hour) is set up in **Part 2.3**, after Resend.
 
 ### 1.5 Upgrade to Pro before launch (recommended)
-**Organization → Billing → Upgrade to Pro.** Free projects pause after a week without activity and have no automatic backups. You don't want either on a Saturday.
+**Organization → Billing → Upgrade to Pro.** Free projects pause after a week without activity and have no automatic backups. You don't want either on auction day.
 
 ---
 
@@ -107,7 +110,7 @@ Don't copy them anywhere else; leave this tab open and paste them straight into 
    - Host: `smtp.resend.com` · Port: `465`
    - Username: `resend` · Password: *paste the `supabase-auth` key here*
    - **Save**.
-3. **Authentication → Rate Limits**: raise **emails sent per hour** to `200` so a busy Saturday of sign-ups isn't throttled. Save.
+3. **Authentication → Rate Limits**: raise **emails sent per hour** to `200` so a busy auction day of sign-ups isn't throttled. Save.
 
 ---
 
@@ -132,6 +135,7 @@ Go to **Project → Settings → Environment Variables**. For each line below, c
 | `RESEND_API_KEY` | From Resend (Part 2.2) |
 | `EMAIL_FROM` | `The Time Souk <auctions@yourdomain.com>` |
 | `STAFF_EMAIL` | Where staff alerts go (new consignments, payments). Several addresses: separate with commas |
+| `OFFICE_LINK_SECRET` | Optional. Another random string (40 letters and numbers). It signs the private invoice and receipt links buyers and sellers get on WhatsApp. If you change it later, links already sent stop working |
 
 Twilio and payment keys get added in Parts 4 and 5.
 
@@ -276,8 +280,8 @@ Staff can run the live console and manage lots, bidders and payments. Only you (
 
 ## Part 8 · Your first auction
 
-1. **Admin → Auctions → New auction.** Number `1`, the auction date, live start `16:00` (Dubai time), when pre-bids open (for example Monday 10:00), and the timer per lot (leave **Default** to use the one in Settings). It's created as a **draft** (hidden from the website).
-   - **To change the date, time or timer later** (even after publishing): open the auction; the **Date, time and timer** card is at the top. Change the auction date (any day; it warns you if it isn't a Saturday), live start, pre-bid opening or timer, then **Save changes**. The website, including the home-page countdown, updates straight away. The live console links here too (**Change date, time or timer**).
+1. **Admin → Auctions → New auction.** It's filled in for the next Sunday at `20:00` (8 pm Dubai time), with pre-bids opening the Tuesday before at 12:00; change any of it, and the timer per lot (leave **Default** to use the one in Settings). It's created as a **draft** (not published anywhere).
+   - **To change the date, time or timer later** (even after publishing): open the auction; the **Date, time and timer** card is at the top. Change the auction date (any day; it warns you if it isn't a Sunday), live start, pre-bid opening or timer, then **Save changes**. The website, including the home-page countdown, updates straight away. The live console links here too (**Change date, time or timer**).
    - **Which timer a lot runs for:** the lot's own timer if you changed it in the live console, otherwise the auction's timer, otherwise the default in Settings.
 2. **Add lots.** Two ways:
    - **Paste from Excel or Google Sheets:** on the auction page, **Paste lots from Excel → Copy header row**, and paste it into row 1 of a new sheet. The columns are:
@@ -287,7 +291,9 @@ Staff can run the live console and manage lots, bidders and payments. Only you (
    - **From a consignment request:** **Admin → Consignments → Create lot** copies the seller's details into a new lot.
 3. **Photos.** Open each lot and drag photos onto the drop area. The first photo is the cover; use ← → to reorder. Photos are resized automatically. Until a lot has photos, the site shows a drawing of the watch.
 4. **Reserves.** Set a reserve on every lot, or tick **No reserve**. The live console warns **NOT SET** for any lot without one. Reserves, costs and consignor details are never shown on the website.
-5. When the catalogue is ready, press **Publish to the website**. Registered bidders can then place bids and maximum bids from the pre-bid opening time until each lot's timer ends on Saturday.
+5. When the catalogue is ready, publish it:
+   - **Publish for Instagram only** while you run auctions on Instagram: the back office treats it as a real auction, and the website doesn't show it.
+   - **Publish on the website and Instagram** when you're ready for website bidding (or **Publish on the website too** from Instagram only). Registered bidders can then place bids and maximum bids from the pre-bid opening time until each lot's timer ends on auction day. **Take off the website (Instagram only)** undoes it.
 
 **Relisting unsold lots:** nothing carries over automatically. On next week's auction page, the **Unsold from earlier auctions** panel lists them: tick the ones the owners want offered again and press **Add to this auction**. Reserves and seller details come with them; old bids don't.
 
@@ -327,7 +333,7 @@ Change these in Vercel, then **Redeploy**:
 
 ---
 
-## Part 10 · Saturday run of show
+## Part 10 · Auction-day run of show
 
 **Pace.** The sale length depends on the timer. For 100 lots, with about 45 seconds between lots, starting at 4:00 pm:
 
@@ -377,7 +383,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | Problem | Fix |
 |---|---|
 | Site still shows sample watches | Supabase variables missing, or you didn't redeploy after adding them. |
-| Site shows an error after connecting Supabase | Check all five database files ran, in order: `0001` to `0005` (Part 1.2). |
+| Site shows an error after connecting Supabase | Check all eight database files ran, in order: `0001` to `0008` (Part 1.2). |
 | Can't change the timer on a lot | Its timer is running. Sudden death: stop it, or let it end and Reopen. |
 | No email code | Check Resend → **Logs**. Check Supabase SMTP settings (Part 2.3), and that the templates contain `{{ .Token }}`. Look in spam. |
 | Email code says "invalid" | Codes expire after 10 minutes and only the newest code works. Ask for a new one. |
@@ -396,6 +402,83 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 - **Arabic copy.** Have a native speaker read the whole site in Arabic.
 - **Licensing.** Confirm with Dubai Economy and Tourism that your trade license covers running auctions (online and on Instagram).
 - **VAT and AML.** Ask your accountant how VAT applies to the seller fee and to own-stock sales, and your compliance adviser whether ID checks or reporting rules apply to high-value sales. **Admin → Bidders** lets you note an ID check per bidder.
+
+---
+
+## Part 13 · The back office (the auction workbook, on the website)
+
+**Admin → Back office** does everything the Excel file *Time Souk Auction Manager* did, for every staff member at once, from any computer or phone. It works alongside the live console and website bidding.
+
+### 13.1 Once
+
+1. Run `supabase/migrations/0006_back_office.sql`, `0007_accounting.sql` and `0008_office_extras.sql` (Part 1.2) if you haven't.
+2. **Back office → Settings** (admin): check the company and bank details, the co-branded name (**DXB Watch × The Time Souk**), fees, hours to pay, delivery and cash on delivery charges, the card fee, the WhatsApp language, and the text printed on documents. Have a lawyer review the intake declaration and seller declaration.
+3. **Back office → Import** (admin): save the workbook in Excel, then choose the `.xlsm` file. The page shows what's in it and what the invoices add up to per auction: compare with the Auctions sheet in Excel, then press **Import into the back office**. Auctions not yet on the website arrive as **Instagram only** (real auctions, not shown on the website). The Ziina key on the workbook's Settings sheet is never read. You can import again later with a newer copy: records are matched and updated, not doubled.
+4. Card links: the back office uses the website's Ziina key (`ZIINA_API_KEY`, Part 5.1). Without it, paste links made in the Ziina app on each invoice's page.
+
+### 13.2 Every auction
+
+| When | Where | What |
+|---|---|---|
+| Seller arrives | **Intake → New intake** | Choose the seller (or add one), type the watches, save. Print the receipt for signing or **Send on WhatsApp** (the seller gets a private link to it). |
+| Building the catalogue | **Intake** | Tick watches in stock, choose the auction, **Add to auction**. Own stock: **Lots → Add a lot**. Photos and descriptions: **Auctions & lots** as before. |
+| Before the live | **Statements**, **Run sheet** | Consignment listings for each seller; the run sheet for the presenter. |
+| During the live | **Lots → Live results** | Type the winner (@handle or buyer code) and hammer price, **Save** (Ctrl+S). A new handle becomes a new buyer. A buyer who wins a second lot gets a **tray** number automatically (the save message says which; it's in the Tray column and on the slips). **Print slip** prints the sold slip (80 mm) without leaving the page; **WhatsApp** sends the winner their price and how to pay. Lots run in the live console: **Overview → Bring in website results**. |
+| A lot added by mistake | **Lots** | **Delete** on its row, then confirm. Only lots with no result, website bids or website invoice; a watch from intake goes back in stock. |
+| An auction made by mistake | **Auctions & lots →** the auction | **Delete this auction** (admin), then confirm. Its lots go with it and intake watches go back in stock. Refused once it has results, payments or card links on its invoices, website bids, or is on the website. |
+| After the live | **Invoices** | **Send** each invoice on WhatsApp (with a private link to the printable invoice). Overseas buyers: type the delivery fee on the invoice's page first. |
+| Buyer replies LINK | the invoice's page | **Make a card link**, then **Send link on WhatsApp**. Paid links are recorded on Payments by themselves. |
+| Money arrives | the invoice's page | **Record payment** (full balance and the usual method are filled in), then **Send confirmation on WhatsApp**. Deposits: the buyer's page. |
+| Buyer paid the consignor directly | the invoice's page | **Record payment**, method **Paid to seller directly**, choose the seller. The invoice counts it as paid; it comes off what you pay that seller. If it's more than their net, the seller owes us the difference (our fee). |
+| Chasing payment | **Invoices → Unpaid** | **Remind** on each row; buyers reminded recently show the time instead. |
+| Packing and delivery | **Lots → After the sale**, **Dispatch** | Delivery status, tray, courier and AWB; print the dispatch list for the courier to sign. |
+| Paying sellers | **Sellers →** the seller | Tick the lots paid for by their buyers, **Mark paid**: the amount already takes off anything buyers paid the seller directly. When the seller owes us instead, it reads **Mark settled · seller paid us**: press it once they've paid. Then **Statements** for the seller's statement. |
+| Returns and refunds | **Lots** (Exception: Returned by buyer / Withdrawn / Buyer defaulted), **Payments → Refunds to make** | The lot leaves the invoice; the money to give back is listed. **Refund** records it and offers the WhatsApp message. |
+
+### 13.3 Accounting
+
+**Back office → Accounting** keeps double-entry books. Sales, seller fees, the cost of own-stock watches sold, payments, deposits, refunds and seller payouts are booked **automatically** from the back office: nothing is typed twice. Only what the back office can't see is entered by hand, under **Money in & out**.
+
+**Once**
+
+1. Run `0007_accounting.sql` (Part 1.2).
+2. **Accounting → Chart & settings** (admin): rename the accounts to suit (e.g. put your bank's name on *1020 Bank: current account*); check which account each payment method lands in (bank transfer → bank, cash → cash on hand, Ziina card links → *Ziina to receive*, and so on) and which account sellers are paid from.
+3. **Accounting → Money in & out → Opening balances** (admin): choose the day the books start (e.g. 1 October 2026) and type what the business had and owed that day: bank and cash balances, the cost of watches in stock, anything owed to suppliers or the owners, the owners' capital. **Balance it** puts the difference in *3050 Opening balances*. Don't add buyers' invoices or consignors here: they're already in the back office.
+
+**As things happen** (Money in & out)
+
+| Happened | Tab | Example |
+|---|---|---|
+| A bill paid | **Expense** | Instagram ads, courier, rent, salaries. Category, amount, paid from; "5% VAT included" splits out the VAT if you're VAT-registered. |
+| A watch bought for own stock | **Stock bought** | It goes into *Watches in stock* at cost. Also type the cost on its lot (Lots › Lot details) so the profit is right when it sells. |
+| Ziina, Tabby or Tamara pays out | **Transfer** | From *Ziina to receive* to the bank: amount sent, fee deducted (→ *Payment processing fees*). |
+| Cash banked, the courier hands over COD cash | **Transfer** | From *Cash on hand* / *Cash on delivery with the courier* to the bank. |
+| An owner puts money in or takes it out | **Owners' money** (admin) | Capital, drawings, loans. |
+| Anything else, or a correction | **Journal entry** (admin) | Any balanced lines. A wrong entry is **voided** (it stays on record, struck out) and entered again. |
+
+When paying a seller (**Sellers →** the seller → **Mark paid**), choose the account it was paid from.
+
+**Every month**
+
+1. **Reconcile** each bank, cash and payment-provider account: open the statement, tick each line that's on it until the *ticked balance* equals the statement's closing balance, then **Finish reconciliation**. Lines on the statement but not in the books (bank charges, payout fees) are recorded first under Money in & out.
+2. Check **Overview → Worth a look**: own-stock lots sold without a cost, overseas invoices without a delivery fee, anything in *Suspense*.
+3. Read the **Profit & loss** (month by month), **Balance sheet** and **Who owes what**.
+4. **Chart & settings → Books closed up to** (admin): set it to the month's last day. Nothing dated on or before then can change any more (payments, results, payouts, entries). Clear it to reopen.
+5. Send your accountant **Trial balance → Download the journal (CSV)**, and the **VAT** page each quarter if you're VAT-registered.
+
+> Consigned watches are not income: only the seller fee is (the hammer price is money held for the seller, in *Owed to consignors*). Own-stock watches count their hammer price as sales and their cost as cost of sales. Have your accountant review the chart and the VAT treatment (pre-owned watches can sometimes use the profit-margin scheme, and exports can be zero-rated; neither is applied automatically).
+
+### 13.4 Training staff: the demo auction
+
+**Back office → Settings → Demo auction (training)** (admin) → **Make the demo auction**. It's auction **999**: ten made-up watches, demo sellers **DEMO-C** (consignment) and **DEMO-O** (own stock) and demo buyers **D0001–D0003**. Choose auction 999 in any back office page and practise everything: results, slips, trays, invoices, WhatsApp (give a demo buyer your own number), payments, a buyer paying the seller directly, dispatch, payouts, statements, and intake for the demo sellers.
+
+- It never goes on the website and is left out of the accounts, the summary totals and the "every auction" lists.
+- It only takes demo buyers and sellers: a new handle typed as a winner becomes a demo buyer (D0004…), and real buyers can't win demo lots. Card links are switched off.
+- **Reset for the next session** clears what staff did and puts fresh lots in. **Remove the demo** deletes it with its demo buyers and sellers.
+
+The back office remembers the auction you last chose, so moving between pages (or to Accounting and back) keeps it.
+
+**Summary** shows every auction side by side (sales, profit, billed, collected, outstanding, owed to sellers). **Sent log** lists every WhatsApp message opened from the back office. **Settings → WhatsApp wording** lets you change any message in English and Arabic.
 
 ---
 

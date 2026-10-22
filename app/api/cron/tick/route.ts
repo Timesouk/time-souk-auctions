@@ -4,6 +4,7 @@ import { adminClient } from "@/lib/supabase/admin";
 import { notifyInvoice, remindInvoice } from "@/lib/invoices";
 import { addWorkingDays, todayDubai } from "@/lib/format";
 import { json } from "@/lib/http";
+import { checkOpenCardLinks } from "@/lib/office/cards";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -35,5 +36,7 @@ export async function GET(req: Request) {
       if (r.sent) report.reminded++;
     }
   }
-  return json({ ok: true, ...report });
+  // Back-office card links: each open one is checked with Ziina every few minutes, in case a webhook was missed.
+  const cards = await checkOpenCardLinks(10, 5).catch(() => ({ checked: 0, paid: 0 }));
+  return json({ ok: true, ...report, cards });
 }

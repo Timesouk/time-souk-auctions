@@ -1,0 +1,146 @@
+/* Back office (the auction workbook, in the admin) and the co-branded invoice. */
+
+.office { display: flex; flex-direction: column; gap: 18px; }
+.office-nav { display: flex; gap: 4px; overflow-x: auto; border-bottom: 2px solid var(--line); margin-top: -8px; }
+.office-nav a { font-family: var(--f-mono); font-size: 12.5px; letter-spacing: 0.04em; text-transform: uppercase; font-weight: 600; padding: 8px 12px; text-decoration: none; white-space: nowrap; border-bottom: 3px solid transparent; margin-bottom: -2px; color: var(--ink-2); }
+.office-nav a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--yellow); background: var(--card); }
+.h-sec { font-size: 18px; font-weight: 900; margin: 0; }
+.nowrap { white-space: nowrap; }
+.office td.mono, .office td .mono { white-space: nowrap; }
+.office td.mono:has(.nowrap) { white-space: normal; }
+.warn-ink { color: var(--red-ink); }
+.ok-ink { color: var(--green); }
+small.sub { display: block; font-size: 12px; color: var(--ink-2); }
+.plain { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.todo { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.todo a { text-decoration: none; }
+.todo a:hover { text-decoration: underline; }
+.todo b { display: inline-block; min-width: 2.2em; font-size: 18px; font-variant-numeric: tabular-nums; }
+.office .stats b { font-size: 21px; white-space: nowrap; }
+.stats a { color: inherit; text-decoration: none; display: block; }
+.stats a:hover b { text-decoration: underline; }
+.form-grid.tight { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.field.check { flex-direction: row; align-items: center; gap: 8px; align-self: end; padding-bottom: 8px; }
+.field.check input { width: auto; }
+details > summary { cursor: pointer; }
+details.panel-card > summary { list-style: none; }
+details.panel-card > summary::-webkit-details-marker { display: none; }
+details.panel-card > summary::before { content: "+ "; font-family: var(--f-mono); }
+details.panel-card[open] > summary::before { content: "– "; }
+td details > summary.btn { list-style: none; display: inline-block; }
+td details[open] { min-width: 300px; }
+
+/* the lots grid */
+.grid-filter { min-width: min(320px, 100%); padding: 7px 10px; border: 2px solid var(--ink); font: inherit; font-size: 14px; }
+.grid-wrap { max-height: calc(100vh - 260px); overflow: auto; }
+table.lgrid { font-size: 13.5px; }
+table.lgrid thead th { position: sticky; top: 0; background: var(--card); z-index: 2; }
+table.lgrid td { padding: 4px 6px; vertical-align: middle; white-space: nowrap; }
+table.lgrid td.watch { white-space: normal; }
+table.lgrid td.wrap { white-space: normal; min-width: 110px; max-width: 150px; }
+table.lgrid td.watch { max-width: 240px; min-width: 140px; }
+table.lgrid td.watch small { display: block; font-family: var(--f-mono); font-size: 11px; color: var(--ink-2); }
+table.lgrid input, table.lgrid select { font: inherit; font-size: 13.5px; padding: 5px 6px; border: 1.5px solid var(--line); background: #fffde6; border-radius: 0; width: 100%; min-width: 60px; }
+table.lgrid input[type="date"] { min-width: 130px; }
+table.lgrid input:focus, table.lgrid select:focus { outline: 2px solid var(--cyan); border-color: var(--ink); }
+table.lgrid td.n input { text-align: end; font-variant-numeric: tabular-nums; }
+table.lgrid tr.dirty td { background: #fff6bf; }
+/* the lots grid's buttons (Print slip, WhatsApp, Delete) stay in view while the grid scrolls sideways */
+table.lgrid td.acts, table.lgrid th.acts { position: sticky; right: 0; background: var(--card); box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.25), inset 0 -1.5px 0 var(--line); z-index: 1; }
+table.lgrid thead th.acts { z-index: 3; box-shadow: -8px 0 8px -8px rgba(0, 0, 0, 0.25), inset 0 -2px 0 var(--ink); }
+table.lgrid tr.dirty td.acts { background: #fff6bf; }
+.savebar { position: sticky; bottom: 0; z-index: 5; display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 10px 12px; background: var(--paper); border-top: 2px solid var(--line); font-weight: 700; font-size: 14px; color: var(--ink-2); }
+.savebar.on { background: var(--yellow); border-top-color: var(--ink); color: var(--ink); }
+.savebar span { margin-inline-end: auto; }
+
+/* WhatsApp composer */
+.wa-dlg { border: 3px solid var(--ink); box-shadow: var(--shadow-lg); padding: 18px; width: min(640px, calc(100vw - 32px)); background: var(--card); color: var(--ink); }
+.wa-dlg::backdrop { background: var(--scrim); }
+.wa-dlg textarea { width: 100%; font: inherit; font-size: 14px; line-height: 1.45; padding: 10px; border: 2px solid var(--ink); border-radius: 0; resize: vertical; white-space: pre-wrap; }
+
+/* invoice page in the admin: document beside the forms */
+.inv-layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(300px, 1fr); gap: 20px; align-items: start; }
+@media (max-width: 1000px) { .inv-layout { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── the co-branded invoice ── */
+.doc { background: #fff; color: #121417; border: 2px solid var(--ink); padding: clamp(18px, 3vw, 34px); display: flex; flex-direction: column; gap: 18px; font-size: 14px; max-width: 900px; }
+.doc-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 14px 24px; border-bottom: 3px solid #121417; padding-bottom: 14px; }
+.doc-logos { display: flex; align-items: center; gap: 12px; }
+.doc-x { font-size: 26px; font-weight: 300; color: #6b7177; }
+.doc-co { display: flex; flex-direction: column; gap: 2px; text-align: end; font-size: 12.5px; color: #4a4f55; }
+.doc-co strong { font-size: 18px; color: #121417; font-weight: 900; }
+.doc-title { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 10px 24px; }
+.doc-title h2 { font-family: var(--f-display); font-size: 30px; margin: 0; letter-spacing: 0.02em; }
+.doc-title dl { display: grid; grid-template-columns: auto auto; gap: 3px 14px; margin: 0; font-size: 13.5px; }
+.doc-title dt { color: #6b7177; }
+.doc-title dd { margin: 0; text-align: end; }
+.doc-bill { display: flex; flex-direction: column; gap: 2px; }
+.doc-bill strong { font-size: 17px; }
+.doc table { font-size: 13.5px; }
+.doc-lots th { border-bottom: 2px solid #121417; }
+.doc-lots small { color: #6b7177; }
+.doc-foot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(220px, 300px); gap: 18px 28px; align-items: start; }
+@media (max-width: 640px) { .doc-foot { grid-template-columns: minmax(0, 1fr); } }
+.doc-pay p { margin: 6px 0; line-height: 1.5; }
+.doc-note { border-inline-start: 4px solid var(--yellow); padding-inline-start: 10px; font-weight: 700; }
+.doc-totals td { padding: 5px 4px; border-bottom: 1px solid #e3e6e1; }
+.doc-totals tr.tot td { font-weight: 900; font-size: 15px; border-top: 2px solid #121417; border-bottom: 0; }
+.doc-terms { font-size: 11.5px; color: #6b7177; border-top: 1px solid #e3e6e1; padding-top: 10px; margin: 0; }
+
+@media print {
+  @page { size: A4; margin: 12mm; }
+  body { background: #fff !important; }
+  .adm-top, .adm-nav, .office-nav, .no-print, .hdr, .ftr, .savebar { display: none !important; }
+  .adm-main { padding: 0 !important; }
+  .inv-layout { display: block; }
+  .doc { border: 0; padding: 0; max-width: none; box-shadow: none; }
+  a { color: inherit; text-decoration: none; }
+}
+
+/* signatures, statements one per page */
+.doc-sign { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 30px; font-size: 12.5px; color: #4a4f55; }
+.doc-sign span { display: block; border-bottom: 1.5px solid #121417; height: 40px; margin-bottom: 6px; }
+.doc + .doc { margin-top: 26px; }
+
+/* dispatch and run sheet */
+table.dispatch tr.waiting td { color: var(--ink-2); background: var(--tint); }
+table.dispatch td.sign { min-width: 110px; }
+table.runsheet td { font-size: 13.5px; }
+
+/* message editor */
+.msg-row { display: grid; grid-template-columns: 200px minmax(0, 1fr) minmax(0, 1fr) auto; gap: 8px; align-items: start; border-bottom: 1.5px solid var(--line); padding-bottom: 8px; }
+.msg-key { display: flex; flex-direction: column; gap: 2px; font-size: 12.5px; }
+.msg-row textarea { width: 100%; font: inherit; font-size: 13.5px; padding: 6px 8px; border: 1.5px solid var(--ink); border-radius: 0; resize: vertical; }
+@media (max-width: 900px) { .msg-row { grid-template-columns: minmax(0, 1fr); } }
+fieldset.plain { border: 0; padding: 0; margin: 0; }
+
+/* sold slips: 80 mm roll */
+.slips { display: flex; flex-wrap: wrap; gap: 14px; }
+.slip { width: 72mm; background: #fff; color: #000; border: 1.5px dashed var(--line); padding: 10px 12px; font-size: 13px; display: flex; flex-direction: column; gap: 4px; }
+.slip hr { border: 0; border-top: 1.5px dashed #000; margin: 4px 0; width: 100%; }
+.slip-brand { font-weight: 900; font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+.slip-lot { font-family: var(--f-display); font-size: 34px; line-height: 1; }
+.slip-watch { font-weight: 800; font-size: 15px; }
+.slip-sm { font-size: 11.5px; }
+.slip-row { display: flex; justify-content: space-between; gap: 8px; }
+.slip-row.big b { font-size: 18px; }
+@media print {
+  .slips { display: block; }
+  .slip { border: 0; width: auto; padding: 0; }
+  .slip + .slip { break-before: page; }
+  .doc-page + .doc-page { break-before: page; }
+  .doc + .doc { margin-top: 0; }
+}
+
+/* accounting reports */
+table.report td, table.report th { padding: 7px 10px; }
+table.report tr.grp td { font-family: var(--f-mono); font-size: 11.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-2); background: var(--tint); padding-top: 10px; }
+table.report tr.sub-tot td { font-weight: 800; border-top: 1.5px solid var(--ink); }
+table.report tr.tot td { font-weight: 900; font-size: 15.5px; border-top: 2.5px solid var(--ink); background: var(--card); }
+table.report a { text-decoration: none; }
+table.report a:hover { text-decoration: underline; }
+table.journal tbody + tbody tr.first td { border-top: 2px solid var(--ink); }
+tr.voided td { color: var(--ink-2); text-decoration: line-through; }
+tr.voided td small.sub { text-decoration: none; }
+tr.ticked td { background: #eaf6ee; }
+@media print { .chips { display: none !important; } }

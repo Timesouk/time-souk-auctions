@@ -9,7 +9,7 @@ const en = {
   otherLang: "العربية",
   meta: {
     title: "The Time Souk · Weekly live watch auction",
-    description: "Pre-owned luxury watches auctioned live every Saturday on Instagram and online. No buyer’s premium: you pay what you bid."
+    description: "Pre-owned luxury watches auctioned live every Sunday on Instagram and online. No buyer’s premium: you pay what you bid."
   },
   nav: {
     auction: "Auction",
@@ -97,7 +97,7 @@ const en = {
       ["Pay in working days", "Card, bank transfer, Tabby, Tamara, or cash on delivery in the UAE. No buyer’s premium."]
     ] as [string, string][],
     consignTitle: "Selling a watch?",
-    consignBody: (fee: string) => `Put it in front of collectors across the UAE, Oman and Saudi Arabia every Saturday. Seller fee ${fee}%, no listing fee.`,
+    consignBody: (fee: string) => `Put it in front of collectors across the UAE, Oman and Saudi Arabia every Sunday. Seller fee ${fee}%, no listing fee.`,
     consignCta: "Consign a watch",
     noAuction: "The next auction is being catalogued. Follow us on Instagram for the date.",
     closedTitle: "Auction closed",
@@ -185,16 +185,16 @@ const en = {
   },
   how: {
     title: "How to bid",
-    lede: (target: number) => `Every Saturday we auction up to ${target} watches from our own stock and from collectors who consign with us. The auction runs live on Instagram and here at the same time.`,
+    lede: (target: number) => `Every Sunday at 8 pm (Dubai time) we auction up to ${target} watches from our own stock and from collectors who consign with us. The auction runs live on Instagram and here at the same time.`,
     week: "The week",
     days: [
-      ["Mon", "Catalogue online. Pre-bids open."],
-      ["Tue", "Register and verify to bid on the website."],
-      ["Wed", "Ask us for extra photos or a video call."],
+      ["Mon", "Winners receive their invoice by email and WhatsApp."],
+      ["Tue", "Catalogue online. Pre-bids open."],
+      ["Wed", "Register and verify to bid on the website."],
       ["Thu", "Consignment cut-off for next week."],
-      ["Fri", "Leave max bids before the live."],
-      ["Sat", "Live on Instagram and online."],
-      ["Sun", "Winners receive their invoice by email and WhatsApp."]
+      ["Fri", "Ask us for extra photos or a video call."],
+      ["Sat", "Leave max bids before the live."],
+      ["Sun", "Live at 8 pm on Instagram and online."]
     ] as [string, string][],
     bidding: "Bidding",
     steps: (timer: string, pay: number) => [
@@ -221,12 +221,12 @@ const en = {
   },
   sell: {
     title: "Consign your watch",
-    lede: (fee: string) => `Put your watch in front of buyers across the UAE, Oman and Saudi Arabia in our Saturday live auction. Seller fee ${fee}% of the hammer price. No listing fee, and no buyer’s premium for your buyers.`,
+    lede: (fee: string) => `Put your watch in front of buyers across the UAE, Oman and Saudi Arabia in our Sunday live auction. Seller fee ${fee}% of the hammer price. No listing fee, and no buyer’s premium for your buyers.`,
     how: "How consigning works",
     steps: (fee: string) => [
       ["Send us the details", "Use the form. We reply on WhatsApp, usually the same day."],
       ["Agree estimate and reserve", "We check the watch and agree an estimate and a confidential reserve with you. Below the reserve, it doesn’t sell."],
-      ["Drop off by Thursday", "We photograph and catalogue it for the following Saturday. Watches are insured while in our care."],
+      ["Drop off by Thursday", "We photograph and catalogue it for the following Sunday. Watches are insured while in our care."],
       ["Get paid", `If it sells, you receive the hammer price minus ${fee}% once the buyer has paid. If it doesn’t, collect it free of charge or offer it again later.`]
     ] as [string, string][],
     form: "Your watch",
@@ -251,7 +251,7 @@ const en = {
   },
   results: {
     title: "Hammer prices",
-    lede: "Every Saturday auction, lot by lot. There’s no buyer’s premium, so the hammer price is what the buyer paid.",
+    lede: "Every Sunday auction, lot by lot. There’s no buyer’s premium, so the hammer price is what the buyer paid.",
     summary: (n: string, date: string, sold: number, total: number, sum: string) => `Auction Nº ${n} · ${date} · ${sold} of ${total} sold · ${sum}`,
     none: "Hammer prices appear here as lots sell.",
     unsold: "Unsold",
@@ -385,7 +385,7 @@ const ar: Dict = {
   otherLang: "English",
   meta: {
     title: "تايم سوق · مزاد ساعات مباشر كل أسبوع",
-    description: "ساعات فاخرة مستعملة في مزاد مباشر كل سبت على إنستغرام وعبر الموقع. بدون عمولة على المشتري: تدفع قيمة مزايدتك فقط."
+    description: "ساعات فاخرة مستعملة في مزاد مباشر كل أحد على إنستغرام وعبر الموقع. بدون عمولة على المشتري: تدفع قيمة مزايدتك فقط."
   },
   nav: {
     auction: "المزاد",
@@ -473,7 +473,7 @@ const ar: Dict = {
       ["ادفع خلال أيام عمل", "بالبطاقة أو التحويل البنكي أو تابي أو تمارا، أو الدفع عند الاستلام داخل الإمارات. بدون عمولة على المشتري."]
     ],
     consignTitle: "تريد بيع ساعتك؟",
-    consignBody: (fee: string) => `اعرض ساعتك أمام هواة الساعات في الإمارات وعُمان والسعودية كل سبت. رسوم البائع ${fee}% وبدون رسوم إدراج.`,
+    consignBody: (fee: string) => `اعرض ساعتك أمام هواة الساعات في الإمارات وعُمان والسعودية كل أحد. رسوم البائع ${fee}% وبدون رسوم إدراج.`,
     consignCta: "اعرض ساعتك للبيع",
     noAuction: "نُجهّز كتالوج المزاد القادم. تابعنا على إنستغرام لمعرفة الموعد.",
     closedTitle: "انتهى المزاد",
@@ -561,16 +561,16 @@ const ar: Dict = {
   },
   how: {
     title: "طريقة المزايدة",
-    lede: (target: number) => `كل سبت نعرض في المزاد حتى ${target} ساعة من مخزوننا ومن هواة يعرضون ساعاتهم لدينا. يُقام المزاد مباشرة على إنستغرام وهنا في الوقت نفسه.`,
+    lede: (target: number) => `كل أحد الساعة 8 مساءً (بتوقيت دبي) نعرض في المزاد حتى ${target} ساعة من مخزوننا ومن هواة يعرضون ساعاتهم لدينا. يُقام المزاد مباشرة على إنستغرام وهنا في الوقت نفسه.`,
     week: "الأسبوع",
     days: [
-      ["الإثنين", "الكتالوج متاح. المزايدة المسبقة مفتوحة."],
-      ["الثلاثاء", "سجّل ووثّق حسابك للمزايدة عبر الموقع."],
-      ["الأربعاء", "اطلب صوراً إضافية أو مكالمة فيديو."],
+      ["الإثنين", "يستلم الفائزون فواتيرهم عبر البريد وواتساب."],
+      ["الثلاثاء", "الكتالوج متاح. المزايدة المسبقة مفتوحة."],
+      ["الأربعاء", "سجّل ووثّق حسابك للمزايدة عبر الموقع."],
       ["الخميس", "آخر موعد لاستلام ساعات المزاد القادم."],
-      ["الجمعة", "حدد حدك الأقصى قبل البث المباشر."],
-      ["السبت", "مباشر على إنستغرام وعبر الموقع."],
-      ["الأحد", "يستلم الفائزون فواتيرهم عبر البريد وواتساب."]
+      ["الجمعة", "اطلب صوراً إضافية أو مكالمة فيديو."],
+      ["السبت", "حدد حدك الأقصى قبل البث المباشر."],
+      ["الأحد", "مباشر الساعة 8 مساءً على إنستغرام وعبر الموقع."]
     ],
     bidding: "المزايدة",
     steps: (timer: string, pay: number) => [
@@ -597,12 +597,12 @@ const ar: Dict = {
   },
   sell: {
     title: "اعرض ساعتك للبيع",
-    lede: (fee: string) => `اعرض ساعتك أمام المشترين في الإمارات وعُمان والسعودية في مزاد السبت المباشر. رسوم البائع ${fee}% من سعر البيع. بدون رسوم إدراج، وبدون عمولة على المشترين.`,
+    lede: (fee: string) => `اعرض ساعتك أمام المشترين في الإمارات وعُمان والسعودية في مزاد الأحد المباشر. رسوم البائع ${fee}% من سعر البيع. بدون رسوم إدراج، وبدون عمولة على المشترين.`,
     how: "كيف تعرض ساعتك",
     steps: (fee: string) => [
       ["أرسل لنا التفاصيل", "استخدم النموذج. نرد عليك عبر واتساب عادةً في اليوم نفسه."],
       ["نتفق على السعر التقديري والحد الأدنى", "نفحص الساعة ونتفق معك على سعر تقديري وحد أدنى سري. دون الحد الأدنى لا تُباع الساعة."],
-      ["سلّمها قبل الخميس", "نصوّرها ونضيفها إلى كتالوج السبت التالي. الساعات مؤمّنة طوال وجودها لدينا."],
+      ["سلّمها قبل الخميس", "نصوّرها ونضيفها إلى كتالوج الأحد التالي. الساعات مؤمّنة طوال وجودها لدينا."],
       ["استلم المبلغ", `إذا بيعت الساعة تستلم سعر البيع ناقص ${fee}% بعد أن يدفع المشتري. وإن لم تُبع، استلمها مجاناً أو اعرضها لاحقاً.`]
     ],
     form: "ساعتك",
@@ -627,7 +627,7 @@ const ar: Dict = {
   },
   results: {
     title: "أسعار البيع",
-    lede: "كل مزادات السبت، قطعة بقطعة. لا توجد عمولة على المشتري، فسعر البيع هو ما دفعه المشتري.",
+    lede: "كل مزادات الأحد، قطعة بقطعة. لا توجد عمولة على المشتري، فسعر البيع هو ما دفعه المشتري.",
     summary: (n: string, date: string, sold: number, total: number, sum: string) => `المزاد رقم ${n} · ${date} · بيعت ${sold} من ${total} · ${sum}`,
     none: "تظهر أسعار البيع هنا عند بيع القطع.",
     unsold: "لم تُبع",

@@ -6,7 +6,7 @@ The weekly live watch auction for **The Time Souk**, Dubai: a bilingual (English
 
 ## How the sale works
 
-- A new auction (Auction Nº 01, 02, …) every Saturday, live from 4 pm Dubai time, up to 100 lots.
+- A new auction (Auction Nº 01, 02, …) every Sunday, live from 8 pm Dubai time, up to 100 lots (on Instagram, and on the website when you publish it there).
 - Registered bidders (email code + phone code, terms accepted) can bid and set maximum bids from the moment pre-bids open.
 - On the day, staff put each lot **on the block** from the console; the website shows it big. Staff press **Start** when the Instagram timer starts: a timer (3 minutes by default; change it in Settings, per auction, or per lot from the console), sudden death, no extensions.
 - Instagram, WhatsApp and phone bids are typed into the console; website bids arrive by themselves. When the reserve is met the lot shows **Pure sale**.
@@ -29,13 +29,15 @@ The weekly live watch auction for **The Time Souk**, Dubai: a bilingual (English
 
 ```
 app/(site)/[locale]/   public site in /en and /ar (home, catalogue, lot pages, live, register, account, pay, results, sell, terms, privacy)
-app/(admin)/admin/     staff admin (live console, auctions, lots, bidders, payments, consignments, settings)
+app/(admin)/admin/     staff admin (live console, back office, auctions, lots, bidders, payments, consignments, settings)
 public/brand/          the logo (site, emails); app/icon.png and the link-preview image are made from it
 app/api/               phone codes, payments, provider webhooks, cron, uploads, CSV export
 components/            site, live bidding and admin components
 lib/                   formatting, auction rules, i18n (EN/AR), Supabase clients, invoices, notifications, payment providers
-supabase/migrations/   the database: tables, security rules and bidding engine (run 0001 to 0005 in order)
-supabase/tests/        bidding-engine tests on an in-memory Postgres
+lib/office/            the back office: invoice and fee rules, double-entry accounting, WhatsApp wording (EN/AR), workbook import
+supabase/migrations/   the database: tables, security rules and bidding engine (run 0001 to 0008 in order)
+supabase/tests/        bidding-engine and back-office database tests on an in-memory Postgres
+tests/office/          back-office rules, messages and import tests (npm run test:office)
 docs/SETUP.md          deployment and run-of-show guide
 ```
 

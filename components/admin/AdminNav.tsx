@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 // The third value marks admin-only pages.
 const LINKS: [string, string, boolean?][] = [
   ["/admin/live", "Live console"],
+  ["/admin/office", "Back office"],
   ["/admin/auctions", "Auctions & lots"],
   ["/admin/bidders", "Bidders"],
   ["/admin/payments", "Winners & payments"],

@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AuctionForm, AuctionStatusButtons } from "@/components/admin/AuctionForm";
+import { AuctionForm, AuctionStatusButtons, DeleteAuction } from "@/components/admin/AuctionForm";
 import { ImportLots, RehearsalReset, Relist, ZeroStarts } from "@/components/admin/ImportLots";
 import { adminClient } from "@/lib/supabase/admin";
 import { IS_PREVIEW } from "@/lib/env";
 import { dateLong, dubaiParts, num, pad2, stamp } from "@/lib/format";
 import { isPure, lotPath, timerLabel } from "@/lib/auction";
+import { auctionState } from "@/lib/office/types";
 
 export const dynamic = "force-dynamic";
 
@@ -49,10 +50,10 @@ export default async function AuctionAdmin({ params }: { params: Promise<{ id: s
     <div className="stack" style={{ gap: 26 }}>
       <div className="adm-head">
         <div>
-          <span className="kick"><Link href="/admin/auctions">Auctions</Link> · {auction.status}</span>
+          <span className="kick"><Link href="/admin/auctions">Auctions</Link> · {auctionState(auction)}</span>
           <h1 className="disp">Auction Nº {pad2(auction.number)} · {dateLong(auction.sale_date)}</h1>
         </div>
-        <AuctionStatusButtons id={auction.id} status={auction.status} />
+        <AuctionStatusButtons id={auction.id} status={auction.status} instagram={!!auction.instagram} demo={!!auction.demo} />
       </div>
 
       <div className="panel-card">
@@ -114,6 +115,13 @@ export default async function AuctionAdmin({ params }: { params: Promise<{ id: s
         <div className="panel-card" style={{ maxWidth: 640 }}>
           <span className="k">Reset for another rehearsal</span>
           <RehearsalReset auctionId={auction.id} number={auction.number} />
+        </div>
+      ) : null}
+
+      {auction.status === "draft" && !auction.demo ? (
+        <div className="panel-card" style={{ maxWidth: 640 }}>
+          <span className="k">Delete this auction</span>
+          <DeleteAuction id={auction.id} number={auction.number} lots={total} />
         </div>
       ) : null}
     </div>
