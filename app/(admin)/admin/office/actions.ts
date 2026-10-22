@@ -203,8 +203,12 @@ export async function saveLots(changes: LotChange[]) {
             if (v && !(DELIVERY_STATUSES as readonly string[]).includes(v)) return bad(`Unknown delivery status "${v}".`);
             priv.delivery_status = v;
             break;
-          case "dispatched_on":
           case "seller_paid_on":
+            // typed or cleared by hand: forget the cash worked out when it was settled on the seller's page
+            priv.seller_paid_on = ymd(v);
+            priv.payout_amount = null;
+            break;
+          case "dispatched_on":
           case "intake_date":
             priv[k] = ymd(v);
             break;
