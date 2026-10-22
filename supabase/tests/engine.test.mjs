@@ -727,3 +727,10 @@ test("0008: a payment to the seller directly names the seller, who can't be dele
   await db.query("delete from customers where id = $1", [c]);
   await db.query("delete from sellers where id = $1", [s]);
 });
+
+test("the lots → auctions link has the name the back office's queries use (lots and auctions are linked twice)", async () => {
+  const r = await all("select conname from pg_constraint where conrelid = 'public.lots'::regclass and confrelid = 'public.auctions'::regclass");
+  assert.deepEqual(r.map(x => x.conname), ["lots_auction_id_fkey"]);
+  const back = await all("select conname from pg_constraint where conrelid = 'public.auctions'::regclass and confrelid = 'public.lots'::regclass");
+  assert.equal(back.length, 1); // block_lot_id: why a plain auctions(...) embed is ambiguous
+});

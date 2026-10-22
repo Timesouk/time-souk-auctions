@@ -118,7 +118,7 @@ export async function saveLots(changes: LotChange[]) {
     const notes: string[] = [];
     let saved = 0;
     // each lot's auction: for the closed-books check, the demo rules and the trays
-    const { data: info, error: infoErr } = await db.from("lots").select("id, lot_number, auction_id, auctions(number, sale_date, demo)").in("id", changes.map(c => c.id));
+    const { data: info, error: infoErr } = await db.from("lots").select("id, lot_number, auction_id, auctions!lots_auction_id_fkey(number, sale_date, demo)").in("id", changes.map(c => c.id));
     if (infoErr) return bad(infoErr.message);
     type AInfo = { number: number; sale_date: string; demo: boolean };
     const lotInfo = new Map((info || []).map(r => [r.id as string, { lot_number: r.lot_number as number, auction_id: r.auction_id as string, a: (Array.isArray(r.auctions) ? r.auctions[0] : r.auctions) as AInfo | null }]));
@@ -252,7 +252,7 @@ export async function saveLots(changes: LotChange[]) {
 /** Buyers who won more than one lot in this auction get a tray number (their watches go together). Returns what changed, to tell staff. */
 async function assignTrays(auctionId: string, customers: Pick<Customer, "id" | "code" | "instagram">[]) {
   const db = adminClient();
-  const { data, error } = await db.from("lots").select("id, lot_number, auctions(number), lot_private(winner_customer_id, hammer, exception, tray)").eq("auction_id", auctionId);
+  const { data, error } = await db.from("lots").select("id, lot_number, auctions!lots_auction_id_fkey(number), lot_private(winner_customer_id, hammer, exception, tray)").eq("auction_id", auctionId);
   if (error || !data?.length) return [];
   const one = <T,>(x: T | T[] | null) => (Array.isArray(x) ? x[0] : x);
   const no = (one(data[0].auctions as { number: number } | { number: number }[] | null) as { number: number } | null)?.number || 0;
@@ -283,7 +283,7 @@ export async function deleteOfficeLot(id: string) {
     const db = adminClient();
     const { data: lot, error } = await db
       .from("lots")
-      .select("id, lot_number, bid_count, auction_id, auctions(number, sale_date), lot_private(hammer, winner_customer_id, winner_text, intake_item_id)")
+      .select("id, lot_number, bid_count, auction_id, auctions!lots_auction_id_fkey(number, sale_date), lot_private(hammer, winner_customer_id, winner_text, intake_item_id)")
       .eq("id", id)
       .maybeSingle();
     if (error) return bad(error.message);
