@@ -33,6 +33,13 @@ export default async function OfficeHome({ searchParams }: { searchParams: Promi
   const dueSellers = o.lots.filter(l => l.payout === "Due to seller" && !l.demo);
   const inStock = o.intake.filter(i => i.status === "In stock" || /: in stock$/.test(i.status)).length;
   const target = sum?.target || o.data.settings.lot_target || 100;
+  // which auctions an "every auction" line comes from, e.g. " · from auction 99" / " · from auctions 98 and 99"
+  const from = (nums: (number | null | undefined)[]) => {
+    const list = [...new Set(nums.filter((n): n is number => !!n))].sort((x, y) => x - y);
+    if (!list.length) return "";
+    const shown = list.length > 4 ? `${list.slice(0, 3).join(", ")} and ${list.length - 3} more` : list.length > 1 ? `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}` : String(list[0]);
+    return ` · from auction${list.length > 1 ? "s" : ""} ${shown}`;
+  };
   return (
     <div className="stack" style={{ gap: 20 }}>
       <div className="adm-head">
@@ -102,22 +109,26 @@ export default async function OfficeHome({ searchParams }: { searchParams: Promi
       )}
 
       <section className="panel-card">
-        <span className="k">Every auction</span>
+        <span className="k">Every auction{a ? `, not only ${a.number}` : ""}</span>
+        <p className="fine">Things still open from any auction, so nothing from an earlier week gets forgotten.</p>
         <ul className="todo">
           <li>
             <Link href="/admin/office/invoices?show=unpaid&all=1">
               <b className={o.owing.length ? "warn-ink" : undefined}>{o.owing.length}</b> unpaid {o.owing.length === 1 ? "invoice" : "invoices"} · {aed(o.owing.reduce((t, i) => t + i.balance, 0))} to collect
               {overdue.length ? ` · ${overdue.length} overdue` : ""}
+              {from(o.owing.map(i => i.auctionNo))}
             </Link>
           </li>
           <li>
             <Link href="/admin/office/payments#refunds">
               <b className={o.refunds.length ? "warn-ink" : undefined}>{o.refunds.length}</b> {o.refunds.length === 1 ? "refund" : "refunds"} to make · {aed(o.refunds.reduce((t, r) => t + r.amount, 0))}
+              {from(o.refunds.map(r => r.auctionNo))}
             </Link>
           </li>
           <li>
             <Link href="/admin/office/sellers">
               <b>{dueSellers.length}</b> {dueSellers.length === 1 ? "lot is" : "lots are"} paid for and due to their seller · {aed(dueSellers.reduce((t, l) => t + l.toPay, 0))}
+              {from(dueSellers.map(l => l.auctionNo))}
             </Link>
           </li>
           <li>
@@ -128,6 +139,7 @@ export default async function OfficeHome({ searchParams }: { searchParams: Promi
           <li>
             <Link href="/admin/office/payments?show=checks">
               <b className={checks.length ? "warn-ink" : undefined}>{checks.length}</b> payment {checks.length === 1 ? "row needs" : "rows need"} a look
+              {from(checks.map(e => e.auctionNo))}
             </Link>
           </li>
         </ul>
