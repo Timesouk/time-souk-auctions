@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { AuctionForm, AuctionStatusButtons } from "@/components/admin/AuctionForm";
+import { AuctionForm, AuctionStatusButtons, DeleteAuction } from "@/components/admin/AuctionForm";
 import { ImportLots, RehearsalReset, Relist, ZeroStarts } from "@/components/admin/ImportLots";
 import { adminClient } from "@/lib/supabase/admin";
 import { IS_PREVIEW } from "@/lib/env";
@@ -115,6 +115,13 @@ export default async function AuctionAdmin({ params }: { params: Promise<{ id: s
         <div className="panel-card" style={{ maxWidth: 640 }}>
           <span className="k">Reset for another rehearsal</span>
           <RehearsalReset auctionId={auction.id} number={auction.number} />
+        </div>
+      ) : null}
+
+      {auction.status === "draft" && !auction.demo ? (
+        <div className="panel-card" style={{ maxWidth: 640 }}>
+          <span className="k">Delete this auction</span>
+          <DeleteAuction id={auction.id} number={auction.number} lots={total} />
         </div>
       ) : null}
     </div>

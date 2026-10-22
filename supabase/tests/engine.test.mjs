@@ -734,3 +734,16 @@ test("the lots → auctions link has the name the back office's queries use (lot
   const back = await all("select conname from pg_constraint where conrelid = 'public.auctions'::regclass and confrelid = 'public.lots'::regclass");
   assert.equal(back.length, 1); // block_lot_id: why a plain auctions(...) embed is ambiguous
 });
+
+test("deleting an auction takes its lots with it; intake watches stay, ready for another auction", async () => {
+  const a = await makeAuction({ status: "draft" });
+  const lot = await makeLot(a);
+  const s = (await one("insert into sellers (code, name) values ('S950', 'Delete test') returning id")).id;
+  const it = (await one("insert into intake_items (receipt_no, item_id, position, seller_id, brand) values ('CR-0950', 'CR-0950-01', 1, $1, 'Rolex') returning id", [s])).id;
+  await db.query("update lot_private set intake_item_id = $1, seller_id = $2 where lot_id = $3", [it, s, lot]);
+  await db.query("delete from auctions where id = $1", [a]);
+  const left = await one("select (select count(*)::int from lots where id = $1) l, (select count(*)::int from lot_private where lot_id = $1) p, (select count(*)::int from intake_items where id = $2) i", [lot, it]);
+  assert.deepEqual([left.l, left.p, left.i], [0, 0, 1]);
+  await db.query("delete from intake_items where id = $1", [it]);
+  await db.query("delete from sellers where id = $1", [s]);
+});

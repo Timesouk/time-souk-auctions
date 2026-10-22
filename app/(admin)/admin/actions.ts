@@ -107,6 +107,56 @@ export async function setAuctionStatus(id: string, status: "draft" | "instagram"
   });
 }
 
+/**
+ * Deletes an auction made by mistake, with its lots (admin only). Refused once anything real hangs on it:
+ * results, website bids or invoices, payments or card links on its invoices, or closed books.
+ * Watches added from intake go back in stock.
+ */
+export async function deleteAuction(id: string) {
+  return guard(async () => {
+    const me = await requireStaff();
+    if (me.role !== "admin") return bad("Only an admin can delete an auction.");
+    const db = adminClient();
+    const { data: a, error } = await db.from("auctions").select("id, number, sale_date, status, demo").eq("id", id).maybeSingle();
+    if (error) return bad(error.message);
+    if (!a) return bad("That auction isn't there any more.");
+    const n = a.number as number;
+    if (a.demo) return bad("This is the demo auction: remove it under Back office › Settings › Demo auction.");
+    if (a.status === "published") return bad(`Auction ${n} is on the website. Take it off the website first.`);
+    if (a.status === "closed") return bad(`Auction ${n} is closed: it has run, so it stays on record.`);
+    const { data: lots } = await db.from("lots").select("id, bid_count, lot_private(hammer, winner_customer_id, winner_text, intake_item_id)").eq("auction_id", id);
+    const priv = (l: { lot_private: unknown }) => ((Array.isArray(l.lot_private) ? l.lot_private[0] : l.lot_private) || {}) as Record<string, unknown>;
+    const withResult = (lots || []).filter(l => { const p = priv(l); return p.hammer != null || !!p.winner_customer_id || !!String(p.winner_text || "").trim(); }).length;
+    if (withResult) return bad(`Auction ${n} has ${withResult} lot${withResult === 1 ? "" : "s"} with a result. Clear the winners and hammer prices first (or keep the auction).`);
+    if ((lots || []).some(l => Number(l.bid_count) > 0)) return bad(`Auction ${n} has bids on the website, so it can't be deleted.`);
+    const { data: web } = await db.from("invoices").select("id").eq("auction_id", id).limit(1);
+    if (web?.length) return bad(`Auction ${n} has website invoices, so it can't be deleted.`);
+    const prefix = `TS${String(n).padStart(3, "0")}-`;
+    const [{ data: pays }, { data: cards }] = await Promise.all([
+      db.from("ledger").select("id").like("invoice_no", `${prefix}%`).limit(1),
+      db.from("card_links").select("id").like("invoice_no", `${prefix}%`).limit(1)
+    ]);
+    if (pays?.length) return bad(`Auction ${n} has payments recorded on its invoices. Remove them on Back office › Payments first.`);
+    if (cards?.length) return bad(`Auction ${n} has card links made for its invoices, so it stays on record.`);
+    const { data: lock } = await db.from("office_settings").select("acct_lock_date").eq("id", 1).maybeSingle();
+    if (lock?.acct_lock_date && String(a.sale_date) <= String(lock.acct_lock_date).slice(0, 10)) {
+      return bad(`The books are closed up to ${String(lock.acct_lock_date).slice(0, 10)}, so auction ${n} can't be deleted.`);
+    }
+    const back = (lots || []).filter(l => !!priv(l).intake_item_id).length;
+    // leftovers keyed by invoice number (adjustments typed, messages logged), then the auction: its lots go with it
+    await db.from("invoice_adjustments").delete().like("invoice_no", `${prefix}%`);
+    await db.from("sent_log").delete().like("ref", `${prefix}%`);
+    const { error: e2 } = await db.from("auctions").delete().eq("id", id);
+    if (e2) return bad(e2.message);
+    await db.from("events").insert({ kind: "auction_deleted", actor: me.id, data: { auction_id: id, number: n, lots: lots?.length || 0 } });
+    revalidatePath("/admin/auctions");
+    revalidatePath("/admin/office", "layout");
+    revalidatePath("/", "layout");
+    const count = lots?.length || 0;
+    return ok(`Auction ${n} deleted${count ? `, with its ${count} lot${count === 1 ? "" : "s"}` : ""}.${back ? ` ${back} watch${back === 1 ? " is" : "es are"} back in stock on Intake.` : ""}`);
+  });
+}
+
 // ─── lots ───
 
 export type LotInput = {
