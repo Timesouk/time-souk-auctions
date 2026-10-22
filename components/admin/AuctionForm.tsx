@@ -76,7 +76,7 @@ export function DeleteAuction({ id, number, lots }: { id: string; number: number
     <div className="stack" style={{ gap: 8 }}>
       <p className="fine">
         Made by mistake? Deleting removes the auction{lots ? ` and its ${lots} lot${lots === 1 ? "" : "s"}` : ""}; watches added from intake go back in stock.
-        It&apos;s refused once anything real hangs on it: results, payments or card links on its invoices, website bids, or a place on the website. Admins only.
+        Test invoices from a live-console run go with it. It&apos;s refused once anything real hangs on it: results, payments or card links on its invoices, a paid website invoice, website bids, or a place on the website. Admins only.
       </p>
       <div className="row">
         <button

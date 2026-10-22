@@ -129,8 +129,16 @@ export async function deleteAuction(id: string) {
     const withResult = (lots || []).filter(l => { const p = priv(l); return p.hammer != null || !!p.winner_customer_id || !!String(p.winner_text || "").trim(); }).length;
     if (withResult) return bad(`Auction ${n} has ${withResult} lot${withResult === 1 ? "" : "s"} with a result. Clear the winners and hammer prices first (or keep the auction).`);
     if ((lots || []).some(l => Number(l.bid_count) > 0)) return bad(`Auction ${n} has bids on the website, so it can't be deleted.`);
-    const { data: web } = await db.from("invoices").select("id").eq("auction_id", id).limit(1);
-    if (web?.length) return bad(`Auction ${n} has website invoices, so it can't be deleted.`);
+    // Website invoices: on an auction that was never on the website they only come from a test run in the live console.
+    // Cancelled or unpaid ones go with it; anything paid (or being paid) keeps the auction on record.
+    const { data: web, error: webErr } = await db.from("invoices").select("id, number, status").eq("auction_id", id);
+    if (webErr) return bad(webErr.message);
+    const paidWeb = (web || []).filter(i => i.status === "paid" || i.status === "processing");
+    if (paidWeb.length) return bad(`Auction ${n} has a paid website invoice (${paidWeb.map(i => i.number).join(", ")}), so it stays on record.`);
+    if (web?.length) {
+      const { data: moved } = await db.from("payments").select("id").in("invoice_id", web.map(i => i.id)).in("status", ["paid", "authorized"]).limit(1);
+      if (moved?.length) return bad(`Auction ${n} has a website card, Tabby or Tamara payment, so it stays on record.`);
+    }
     const prefix = `TS${String(n).padStart(3, "0")}-`;
     const [{ data: pays }, { data: cards }] = await Promise.all([
       db.from("ledger").select("id").like("invoice_no", `${prefix}%`).limit(1),
@@ -146,6 +154,11 @@ export async function deleteAuction(id: string) {
     // leftovers keyed by invoice number (adjustments typed, messages logged), then the auction: its lots go with it
     await db.from("invoice_adjustments").delete().like("invoice_no", `${prefix}%`);
     await db.from("sent_log").delete().like("ref", `${prefix}%`);
+    if (web?.length) {
+      // their payment attempts go with them
+      const { error: e1 } = await db.from("invoices").delete().in("id", web.map(i => i.id));
+      if (e1) return bad(e1.message);
+    }
     const { error: e2 } = await db.from("auctions").delete().eq("id", id);
     if (e2) return bad(e2.message);
     await db.from("events").insert({ kind: "auction_deleted", actor: me.id, data: { auction_id: id, number: n, lots: lots?.length || 0 } });
@@ -153,7 +166,11 @@ export async function deleteAuction(id: string) {
     revalidatePath("/admin/office", "layout");
     revalidatePath("/", "layout");
     const count = lots?.length || 0;
-    return ok(`Auction ${n} deleted${count ? `, with its ${count} lot${count === 1 ? "" : "s"}` : ""}.${back ? ` ${back} watch${back === 1 ? " is" : "es are"} back in stock on Intake.` : ""}`);
+    const w = web?.length || 0;
+    return ok(
+      `Auction ${n} deleted${count ? `, with its ${count} lot${count === 1 ? "" : "s"}` : ""}${w ? ` and ${w} test website invoice${w === 1 ? "" : "s"}` : ""}.` +
+      (back ? ` ${back} watch${back === 1 ? " is" : "es are"} back in stock on Intake.` : "")
+    );
   });
 }
 

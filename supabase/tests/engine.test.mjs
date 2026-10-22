@@ -747,3 +747,15 @@ test("deleting an auction takes its lots with it; intake watches stay, ready for
   await db.query("delete from intake_items where id = $1", [it]);
   await db.query("delete from sellers where id = $1", [s]);
 });
+
+test("a test auction's cancelled website invoices (and their payment attempts) can go before the auction does", async () => {
+  const a = await makeAuction({ status: "draft" });
+  const lot = await makeLot(a);
+  const inv = (await one("insert into invoices (number, lot_id, auction_id, amount, due_date, status, void_reason) values ('T-99-1', $1, $2, 1000, current_date, 'void', 'Rehearsal reset') returning id", [lot, a])).id;
+  await db.query("insert into payments (invoice_id, provider, amount) values ($1, 'ziina', 1000)", [inv]);
+  await expectError(db.query("delete from auctions where id = $1", [a]), "update or delete on table \"auctions\" violates");
+  await db.query("delete from invoices where auction_id = $1", [a]);
+  await db.query("delete from auctions where id = $1", [a]);
+  const left = await one("select (select count(*)::int from lots where id = $1) l, (select count(*)::int from payments p join invoices i on i.id = p.invoice_id where i.auction_id = $2) p", [lot, a]);
+  assert.deepEqual([left.l, left.p], [0, 0]);
+});
