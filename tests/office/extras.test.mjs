@@ -229,3 +229,36 @@ test("print all invoices: the same filters as the Invoices page, in invoice-numb
   // every invoice is in exactly the "All" list; the filtered lists are parts of it
   for (const [k] of F.INVOICE_SHOWS) assert.ok(a1.filter(i => F.showInvoice(k, i)).length <= a1.length);
 });
+
+test("delivery for a whole invoice: every lot together, the date kept or cleared, pickups collected", () => {
+  const D = require(out + "delivery.js");
+  const o = E.compute(sampleOffice(NOW));
+  const multi = o.invoices.find(i => i.lots.length > 1);
+  assert.ok(multi, "the sample has an invoice with two lots");
+  const courier = { ...multi, delivery: "Courier", lots: multi.lots.map((l, k) => ({ ...l, delivery_status: k ? "" : "Packed", dispatched_on: k ? null : "2026-10-27" })) };
+  const done = D.deliveryPlan(courier, "Done", "2026-10-29");
+  assert.equal(done.length, courier.lots.length);
+  assert.ok(done.every(u => u.delivery_status === "Delivered"));
+  assert.equal(done[0].dispatched_on, "2026-10-27", "a date already typed is kept");
+  assert.ok(done.slice(1).every(u => u.dispatched_on === "2026-10-29"));
+  assert.ok(D.deliveryPlan(courier, "Packed", "2026-10-29").every(u => u.delivery_status === "Packed" && u.dispatched_on === null));
+  assert.ok(D.deliveryPlan(courier, "", "2026-10-29").every(u => u.delivery_status === "" && u.dispatched_on === null));
+  const pickup = { ...courier, delivery: "Pickup" };
+  assert.ok(D.deliveryPlan(pickup, "Done", "2026-10-29").every(u => u.delivery_status === "Collected"));
+  assert.deepEqual(D.deliveryPlan(pickup, "With courier", "2026-10-29"), [], "no courier for a pickup");
+  // a watch that went back to its seller is never overwritten from the invoice
+  const back = { ...courier, lots: courier.lots.map((l, k) => (k ? l : { ...l, delivery_status: "Returned to seller" })) };
+  assert.equal(D.deliveryPlan(back, "Done", "2026-10-29").length, courier.lots.length - 1);
+  // the engine then shows the invoice as delivered and done
+  const data = sampleOffice(NOW);
+  const ids = new Set(multi.lots.map(l => l.id));
+  for (const l of data.lots) if (ids.has(l.id)) l.delivery_status = D.stepStatus(multi, "Done");
+  const after = E.compute(data).invoicesByNo.get(multi.no);
+  assert.equal(after.deliveryStatus, multi.delivery === "Pickup" ? "Collected" : "Delivered");
+  assert.equal(after.nextStep, "Done");
+  // cash on delivery isn't "still to pay" before handing over
+  assert.equal(D.stillOwes({ paysBy: T.COD, balance: 500 }), 0);
+  assert.equal(D.stillOwes({ paysBy: "Bank transfer", balance: 500 }), 500);
+  assert.equal(D.isDeliveryStep("Done"), true);
+  assert.equal(D.isDeliveryStep("Lost"), false);
+});

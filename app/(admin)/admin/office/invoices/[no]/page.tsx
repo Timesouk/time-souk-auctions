@@ -8,6 +8,8 @@ import { InvoiceDoc } from "@/components/office/InvoiceDoc";
 import { WaButton } from "@/components/office/Wa";
 import { AdjustmentForm, CopyButton, DeleteEntry, EntryForm, PrintButton } from "@/components/office/forms";
 import { CardLinkButton, PastedLink } from "@/components/office/forms2";
+import { InvoiceDelivery } from "@/components/office/Delivery";
+import { stillOwes } from "@/lib/office/delivery";
 import { ziinaReady } from "@/lib/payments/ziina";
 import { openCardLink } from "@/lib/office/view";
 import { getStaff } from "@/lib/staff";
@@ -103,6 +105,13 @@ export default async function OfficeInvoice({ params }: { params: Promise<{ no: 
               <EntryForm kind="Refund" title={`Refund · AED ${amt(-inv.balance)} overpaid`} customerId={c.id} invoiceNo={inv.no} amount={-inv.balance} method={entries.filter(e => e.kind !== "Refund").pop()?.method || "Bank transfer"} lockBuyer confirm={confirm} />
             </div>
           ) : null}
+          <div className="panel-card">
+            <InvoiceDelivery
+              inv={{ no: inv.no, status: inv.deliveryStatus, pickup: inv.delivery === "Pickup", owe: stillOwes(inv) }}
+              courier={new Set(inv.lots.map(l => l.courier)).size === 1 ? inv.lots[0].courier : ""}
+              today={o.today}
+            />
+          </div>
           <div className="panel-card">
             <AdjustmentForm
               value={{

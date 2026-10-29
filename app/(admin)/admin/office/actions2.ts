@@ -12,6 +12,7 @@ import { MESSAGE_KEYS } from "@/lib/office/messages";
 import { BOX_PAPERS, CONDITIONS, DEFAULT_SETTINGS, type IntakeItem } from "@/lib/office/types";
 import type { Result } from "../actions";
 import { booksClosedUpTo, closedMessage } from "@/lib/office/lock";
+import { deliveryPlan, isDeliveryStep, stepWords, stillOwes } from "@/lib/office/delivery";
 
 const ok = (message: string, id?: string): Result => ({ ok: true, message, id });
 /** A column added by 0008 missing means that update hasn't been run yet: say so plainly. */
@@ -185,6 +186,51 @@ export async function markSellerPaid(input: { lotIds: string[]; date: string; re
     const total = r2(picked.reduce((t, l) => t + (cash.get(l.id) ?? l.net), 0));
     const n = `${picked.length} lot${picked.length === 1 ? "" : "s"}`;
     return ok(total >= 0 ? `${n} settled: AED ${total.toLocaleString("en-US")} paid to the seller.` : `${n} settled: the seller paid us AED ${(-total).toLocaleString("en-US")}.`);
+  });
+}
+
+// ───────────────────────────── delivery ─────────────────────────────
+
+/** Packed, with the courier, delivered or collected: for whole invoices at once (one, or many ticked on a list). */
+export async function setInvoiceDelivery(input: { nos: string[]; step: string; date?: string; courier?: string }) {
+  return guard(async () => {
+    if (!isDeliveryStep(input.step)) return bad("Choose packed, with courier or delivered.");
+    const step = input.step;
+    const nos = [...new Set((input.nos || []).map(n => str(n, 40).toUpperCase()).filter(Boolean))].slice(0, 300);
+    if (!nos.length) return bad("Tick the invoices first.");
+    const o = compute(await loadOfficeData());
+    const gone = nos.filter(n => !o.invoicesByNo.get(n));
+    if (gone.length) return bad(`No open invoice ${gone.join(", ")} (refresh the page).`);
+    const invs = nos.map(n => o.invoicesByNo.get(n)!);
+    const date = ymd(input.date) || today();
+    const courier = input.courier == null ? undefined : str(input.courier, 300);
+    // one update per distinct result, so a big list is a handful of requests
+    const groups = new Map<string, { row: Record<string, unknown>; ids: string[] }>();
+    for (const inv of invs) {
+      for (const u of deliveryPlan(inv, step, date)) {
+        const row = { delivery_status: u.delivery_status, dispatched_on: u.dispatched_on, ...(courier !== undefined ? { courier } : {}) };
+        const k = JSON.stringify(row);
+        const g = groups.get(k);
+        if (g) g.ids.push(u.id);
+        else groups.set(k, { row, ids: [u.id] });
+      }
+    }
+    const db = adminClient();
+    const now = new Date().toISOString();
+    let lots = 0;
+    for (const { row, ids } of groups.values()) {
+      const { error } = await db.from("lot_private").update({ ...row, updated_at: now }).in("lot_id", ids);
+      if (error) return bad(error.message);
+      lots += ids.length;
+    }
+    refresh();
+    const pickups = invs.filter(i => i.delivery === "Pickup").length;
+    const what = invs.length === 1 ? invs[0].no : `${invs.length} invoices`;
+    const handed = step === "Done" ? invs : step === "With courier" ? invs.filter(i => i.delivery !== "Pickup") : [];
+    const owing = handed.filter(i => stillOwes(i) > 0);
+    const warn = owing.length ? ` Not paid yet: ${owing.map(i => `${i.no} (AED ${stillOwes(i).toLocaleString("en-US")})`).join(", ")}.` : "";
+    const skipped = step === "With courier" && pickups ? ` Pickup order${pickups === 1 ? "" : "s"} left as ${pickups === 1 ? "it was" : "they were"} (no courier).` : "";
+    return ok(`${what} ${stepWords(step, pickups, invs.length - pickups)} (${lots} lot${lots === 1 ? "" : "s"}).${skipped}${warn}`);
   });
 }
 

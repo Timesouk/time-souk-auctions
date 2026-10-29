@@ -7,6 +7,8 @@ import { COD } from "@/lib/office/types";
 import { INVOICE_SHOWS as SHOWS, invoiceShow, showInvoice as pick } from "@/lib/office/invoice-filter";
 import { AuctionPicker, DemoNote, LotKeys, Pill, SetupNeeded } from "@/components/office/bits";
 import { WaButton } from "@/components/office/Wa";
+import { BulkDelivery, RowDelivered, Tick, TickAll, type DeliveryInv } from "@/components/office/Delivery";
+import { stillOwes } from "@/lib/office/delivery";
 
 export const dynamic = "force-dynamic";
 
@@ -25,6 +27,7 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
   const href = (k: string, everything = all) => `/admin/office/invoices?${everything ? "all=1" : `a=${a?.number ?? ""}`}${k ? `&show=${k}` : ""}`;
   const totals = list.reduce((t, i) => ({ total: t.total + i.total, paid: t.paid + i.paid, bal: t.bal + Math.max(0, i.balance) }), { total: 0, paid: 0, bal: 0 });
   const remindable = list.filter(i => i.balance > 0 && i.paysBy !== COD);
+  const dinv = (i: (typeof list)[number]): DeliveryInv => ({ no: i.no, status: i.deliveryStatus, pickup: i.delivery === "Pickup", owe: stillOwes(i) });
   return (
     <div className="stack" style={{ gap: 16 }}>
       <div className="adm-head">
@@ -64,10 +67,13 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
       {list.length === 0 ? (
         <p className="empty">No invoices here{base.length ? " with this filter" : " yet: they appear when lots are sold with a buyer"}.</p>
       ) : (
+        <>
+        <BulkDelivery formId="inv-delivery" rows={list.map(dinv)} />
         <div className="tbl-wrap">
           <table>
             <thead>
               <tr>
+                <th className="no-print"><TickAll formId="inv-delivery" /></th>
                 <th>Invoice</th><th>Buyer</th><th>Lots</th><th className="n">Total</th><th className="n">Paid</th><th className="n">Balance</th>
                 <th>Status</th><th>Due</th><th>Sent</th><th>Next step</th><th />
               </tr>
@@ -80,6 +86,7 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
                 const who = i.customer.full_name || (i.customer.instagram ? `@${i.customer.instagram}` : i.customer.code);
                 return (
                   <tr key={i.no}>
+                    <td className="no-print"><Tick formId="inv-delivery" no={i.no} /></td>
                     <td className="mono nowrap"><Link href={`/admin/office/invoices/${i.no}`}>{i.no}</Link></td>
                     <td>
                       <Link href={`/admin/office/buyers/${i.customer.code}`}>{who}</Link>
@@ -90,7 +97,7 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
                     <td className="n">{amt(i.total)}{i.feeMissing ? <small className="sub">+ delivery</small> : null}</td>
                     <td className="n">{amt(i.paid)}</td>
                     <td className="n"><b>{amt(i.balance)}</b></td>
-                    <td><Pill s={i.status} /></td>
+                    <td><Pill s={i.status} />{i.deliveryStatus !== "Not sent" ? <small className="sub">{i.deliveryStatus}</small> : null}</td>
                     <td className="nowrap">
                       {i.balance > 0 && i.paysBy !== COD && i.due ? (i.hoursOverdue ? <span className="warn-ink">{i.hoursOverdue}h overdue</span> : dateText(new Date(i.due + 4 * 3600e3).toISOString().slice(0, 10), "EN")) : ""}
                     </td>
@@ -106,6 +113,7 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
                               log={{ ref: i.no, name: who, total: i.total, balance: i.balance, kind: "Reminder", link: "" }} />
                           )
                         ) : null}
+                        {stillOwes(i) === 0 || i.deliveryStatus === "With courier" ? <RowDelivered inv={dinv(i)} /> : null}
                       </div>
                     </td>
                   </tr>
@@ -114,6 +122,7 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );
