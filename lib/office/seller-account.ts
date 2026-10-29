@@ -1,6 +1,6 @@
 // A consignor's account with us, line by line, across every auction: what their sold watches earned them, what buyers
 // paid them directly (for their own watches or anyone else's), what we paid them and what they paid us. Pure (no database).
-import { r2, type Office } from "./engine";
+import { pad3, r2, type LotView, type Office } from "./engine";
 import { DIRECT } from "./types";
 
 export type AccountLine = {
@@ -80,4 +80,87 @@ export function sellerAccount(o: Office, sellerId: string): SellerAccount {
     return { ...l, amount: r2(l.amount), balance: run };
   });
   return { lines, balance: run, waiting: r2(lots.filter(l => l.payout === "Wait – buyer not paid").reduce((t, l) => t + l.net, 0)) };
+}
+
+/** One payment a buyer made straight to the seller, for an invoice of this auction. */
+export type DirectLine = { date: string; invoice: string; buyer: string; amount: number; reference: string; others: string[] };
+
+/** One seller's figures for one auction: what their sold watches came to, and what's left after what they've had. */
+export type AuctionFigures = {
+  lots: LotView[];
+  sold: LotView[];
+  hammer: number;
+  fees: number;
+  vatFees: number;
+  /** consignment: hammer less our fee and its VAT */
+  net: number;
+  /** what this auction's buyers paid the seller directly (for their watches or anyone else's) */
+  direct: number;
+  directs: DirectLine[];
+  /** cash we paid them for this auction's lots (negative: they paid us when the lots were settled) */
+  paidByUs: number;
+  /** net − direct − paidByUs: + we still owe them for this auction, − they owe us */
+  balance: number;
+  /** part of a positive balance for lots whose buyer hasn't paid yet */
+  waiting: number;
+  /** invoices of this auction whose buyer paid this seller directly */
+  directInvoices: Set<string>;
+  /** own stock: who bought each sold lot and whether they've paid (e.g. "B0006 · Paid · to S001 directly") */
+  buyer: Map<string, string>;
+  /** own stock: cost of the watches sold, how many sold without a cost, and the profit */
+  cost: number;
+  costMissing: number;
+  profit: number;
+  /** own stock: hammer of sold lots whose buyer hasn't paid in full yet */
+  unpaidHammer: number;
+};
+
+export function auctionFigures(o: Office, auctionId: string, sellerId: string): AuctionFigures | null {
+  const auction = o.data.auctions.find(a => a.id === auctionId);
+  const seller = o.sellersById.get(sellerId);
+  if (!auction || !seller) return null;
+  const lots = o.lots.filter(l => l.auction_id === auctionId && l.seller_id === sellerId);
+  if (!lots.length) return null;
+  const sold = lots.filter(l => l.sold);
+  const sum = (f: (l: LotView) => number) => r2(sold.reduce((t, l) => t + f(l), 0));
+  const prefix = `TS${pad3(auction.number)}-`;
+  const directs: DirectLine[] = o.ledger
+    .filter(e => e.kind === "Payment" && e.method === DIRECT && e.paid_to_seller_id === sellerId && (e.invoice_no || "").toUpperCase().startsWith(prefix) && (seller.demo || !e.demo))
+    .map(e => {
+      const inv = o.invoicesByNo.get(e.invoice_no);
+      return {
+        date: e.entry_date, invoice: e.invoice_no, buyer: e.customer?.code || "", amount: r2(e.signed), reference: e.reference || "",
+        others: inv ? inv.lots.filter(l => l.seller_id !== sellerId).map(l => l.key) : []
+      };
+    })
+    .sort((a, b) => a.date.localeCompare(b.date) || a.invoice.localeCompare(b.invoice));
+  const direct = r2(directs.reduce((t, d) => t + d.amount, 0));
+  const consigned = sold.filter(l => l.type === "Consignment");
+  const net = r2(consigned.reduce((t, l) => t + l.net, 0));
+  const paidByUs = r2(consigned.filter(l => l.payout === "Paid").reduce((t, l) => t + (l.payout_amount != null ? Number(l.payout_amount) : l.net), 0));
+  const balance = r2(net - direct - paidByUs);
+  const waitingNet = r2(consigned.filter(l => l.payout === "Wait – buyer not paid").reduce((t, l) => t + l.net, 0));
+  const own = sold.filter(l => l.type === "Own stock");
+  const buyer = new Map<string, string>();
+  for (const l of own) {
+    const inv = l.invoiceNo ? o.invoicesByNo.get(l.invoiceNo) : undefined;
+    if (!inv) {
+      buyer.set(l.id, "Buyer to choose");
+      continue;
+    }
+    const to = [...new Set(o.ledger.filter(e => e.invoice_no === inv.no && e.kind === "Payment" && e.method === DIRECT && e.paid_to_seller_id).map(e => o.sellersById.get(e.paid_to_seller_id!)?.code || "a seller"))];
+    buyer.set(l.id, `${inv.customer.code} · ${inv.status}${to.length ? ` · paid to ${to.join(", ")} directly` : ""}`);
+  }
+  return {
+    lots, sold,
+    hammer: sum(l => Number(l.hammer) || 0), fees: sum(l => l.fee), vatFees: sum(l => l.vatFee), net,
+    direct, directs, paidByUs, balance,
+    waiting: balance > 0 ? r2(Math.min(balance, waitingNet)) : 0,
+    directInvoices: new Set(directs.map(d => d.invoice.toUpperCase())),
+    buyer,
+    cost: r2(own.reduce((t, l) => t + (Number(l.cost) || 0), 0)),
+    costMissing: own.filter(l => !(Number(l.cost) > 0)).length,
+    profit: r2(own.reduce((t, l) => t + l.profit, 0)),
+    unpaidHammer: r2(own.filter(l => !l.invoiceNo || (o.invoicesByNo.get(l.invoiceNo)?.balance ?? 1) > 0.005).reduce((t, l) => t + (Number(l.hammer) || 0), 0))
+  };
 }

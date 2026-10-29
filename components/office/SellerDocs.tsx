@@ -1,7 +1,6 @@
 // Seller paperwork, printed with both logos: the consignment intake receipt and the listing / statement per auction.
-import { amt, pad3, type IntakeView, type LotView, type Office } from "@/lib/office/engine";
-import { DIRECT } from "@/lib/office/types";
-import type { SellerAccount } from "@/lib/office/seller-account";
+import { amt, type IntakeView, type LotView, type Office } from "@/lib/office/engine";
+import { auctionFigures, type AuctionFigures, type SellerAccount } from "@/lib/office/seller-account";
 import { dateText, pctText } from "@/lib/office/messages";
 import type { OAuction, OfficeSettings, Seller } from "@/lib/office/types";
 import { DocHead } from "./DocHead";
@@ -85,9 +84,9 @@ export function ReceiptDoc({ receipt, items, seller, s }: { receipt: string; ite
 
 export type Statement = {
   auction: OAuction; seller: Seller; lots: LotView[]; listing: boolean;
-  /** What this auction's buyers paid the seller directly. */
-  direct: number;
-  /** The seller's account across every auction: we owe them (+) or they owe us (−), and money they hold for us. */
+  /** This auction's figures: net, paid to them directly by buyers, paid by us, what's left. */
+  fig: AuctionFigures;
+  /** The seller's account across every auction: we owe them (+) or they owe us (−). */
   account: { owed: number; held: number };
 };
 
@@ -95,49 +94,50 @@ export type Statement = {
 export function statementFor(o: Office, auctionId: string, sellerId: string): Statement | null {
   const auction = o.data.auctions.find(a => a.id === auctionId);
   const seller = o.data.sellers.find(x => x.id === sellerId);
-  if (!auction || !seller) return null;
-  const lots = o.lots.filter(l => l.auction_id === auctionId && l.seller_id === sellerId);
-  if (!lots.length) return null;
-  const decided = lots.some(l => l.sold || l.status === "Unsold" || l.exception);
-  const prefix = `TS${pad3(auction.number)}-`;
-  const direct = o.ledger
-    .filter(e => e.kind === "Payment" && e.method === DIRECT && e.paid_to_seller_id === sellerId && e.invoice_no.toUpperCase().startsWith(prefix))
-    .reduce((t, e) => t + e.amount, 0);
+  const fig = auctionFigures(o, auctionId, sellerId);
+  if (!auction || !seller || !fig) return null;
+  const decided = fig.lots.some(l => l.sold || l.status === "Unsold" || l.exception);
   const sv = o.sellersById.get(sellerId);
-  return { auction, seller, lots, listing: !decided && auction.sale_date >= o.today, direct: Math.round(direct * 100) / 100, account: { owed: sv?.owed || 0, held: sv?.held || 0 } };
+  return { auction, seller, lots: fig.lots, listing: !decided && auction.sale_date >= o.today, fig, account: { owed: sv?.owed || 0, held: sv?.held || 0 } };
 }
 
+const minus = (n: number) => (Math.abs(n) < 0.005 ? "0" : n > 0 ? `−${amt(n)}` : `+${amt(-n)}`);
+
 export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
-  const { auction, seller, lots, listing, account } = st;
-  const sold = lots.filter(l => l.sold);
-  const sum = (f: (l: LotView) => number) => sold.reduce((t, l) => t + f(l), 0);
-  const net = sum(l => l.net);
-  // this auction: lots settled with the seller (whatever cash moved, since money they held from buyers is netted at account level)
-  const settled = sold.filter(l => l.payout === "Paid").reduce((t, l) => t + l.net, 0);
-  const left = Math.round((net - settled) * 100) / 100;
-  const r = (n: number) => Math.round(n * 100) / 100;
+  const { auction, seller, lots, listing, account, fig } = st;
   const own = seller.kind === "own";
+  const sold = fig.sold;
+  // the lot's "Paid" column: when we settled it, or that its buyer paid the seller directly
+  const paidCell = (l: LotView) => {
+    if (!l.sold) return "";
+    if (own) return fig.buyer.get(l.id) || "";
+    if (l.seller_paid_on) return l.seller_paid_on;
+    if (l.invoiceNo && fig.directInvoices.has(l.invoiceNo.toUpperCase())) return "Buyer paid you";
+    return l.payout === "Wait – buyer not paid" ? "Buyer to pay" : "Due";
+  };
   return (
     <article className="doc doc-page">
       <DocHead s={s} />
       <div className="doc-title">
-        <h2>{listing ? "CONSIGNMENT LISTING" : "CONSIGNMENT STATEMENT"}</h2>
+        <h2>{listing ? (own ? "OWN STOCK LISTING" : "CONSIGNMENT LISTING") : own ? "OWN STOCK STATEMENT" : "CONSIGNMENT STATEMENT"}</h2>
         <dl>
           <dt>Auction</dt><dd>{auction.number} · {dateText(auction.sale_date, "EN")}</dd>
           <dt>Seller ID</dt><dd className="mono">{seller.code}</dd>
-          <dt>Seller fee</dt><dd>{feeText(seller.fee_pct ?? s.fee_pct, seller.fee_fixed ?? s.fee_fixed)}</dd>
+          <dt>Seller fee</dt><dd>{own ? "Own stock: no fee" : feeText(seller.fee_pct ?? s.fee_pct, seller.fee_fixed ?? s.fee_fixed)}</dd>
         </dl>
       </div>
       <section className="doc-bill">
-        <span className="k">Seller</span>
+        <span className="k">{own ? "Stock of" : "Seller"}</span>
         <strong>{seller.name}</strong>
         <span>{[seller.phone, seller.email].filter(Boolean).join("  ·  ")}</span>
-        {seller.iban ? <span>Payout to: {seller.bank ? `${seller.bank} · ` : ""}<span className="mono">{seller.iban}</span></span> : null}
+        {seller.iban && !own ? <span>Payout to: {seller.bank ? `${seller.bank} · ` : ""}<span className="mono">{seller.iban}</span></span> : null}
       </section>
       <table className="doc-lots">
         <thead>
           {listing ? (
             <tr><th>Lot</th><th>Watch</th><th className="n">Start</th><th className="n">Reserve</th></tr>
+          ) : own ? (
+            <tr><th>Lot</th><th>Watch</th><th>Result</th><th className="n">Hammer</th><th className="n">Cost</th><th className="n">Profit</th><th>Buyer</th></tr>
           ) : (
             <tr><th>Lot</th><th>Watch</th><th>Result</th><th className="n">Hammer</th><th className="n">Fee</th>{s.vat_fee_pct ? <th className="n">VAT</th> : null}<th className="n">Net to you</th><th>Paid</th></tr>
           )}
@@ -152,50 +152,94 @@ export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
                   <td className="n">{amt(l.start_price)}</td>
                   <td className="n">{l.reserve ? amt(l.reserve) : "none"}</td>
                 </>
+              ) : own ? (
+                <>
+                  <td>{l.sold || l.status === "Sold – add buyer" ? "Sold" : l.status}</td>
+                  <td className="n">{l.sold ? amt(l.hammer) : ""}</td>
+                  <td className="n">{l.sold ? (Number(l.cost) > 0 ? amt(l.cost) : "not typed") : ""}</td>
+                  <td className="n">{l.sold ? amt(l.profit) : ""}</td>
+                  <td className="nowrap">{paidCell(l)}</td>
+                </>
               ) : (
                 <>
-                  <td>{l.sold ? "Sold" : l.status === "Sold – add buyer" ? "Sold" : l.status}</td>
+                  <td>{l.sold || l.status === "Sold – add buyer" ? "Sold" : l.status}</td>
                   <td className="n">{l.sold ? amt(l.hammer) : ""}</td>
-                  <td className="n">{l.sold && !own ? amt(l.fee) : ""}</td>
-                  {s.vat_fee_pct ? <td className="n">{l.sold && !own ? amt(l.vatFee) : ""}</td> : null}
-                  <td className="n">{l.sold && !own ? amt(l.net) : ""}</td>
-                  <td className="nowrap">{l.seller_paid_on || ""}</td>
+                  <td className="n">{l.sold ? amt(l.fee) : ""}</td>
+                  {s.vat_fee_pct ? <td className="n">{l.sold ? amt(l.vatFee) : ""}</td> : null}
+                  <td className="n">{l.sold ? amt(l.net) : ""}</td>
+                  <td className="nowrap">{paidCell(l)}</td>
                 </>
               )}
             </tr>
           ))}
         </tbody>
       </table>
+      {!listing && !own && fig.directs.length ? (
+        <p className="fine">
+          Paid to you directly by buyers:{" "}
+          {fig.directs.map((d, i) => (
+            <span key={i}>
+              {i ? "; " : ""}{dateText(d.date, "EN").slice(4)} · {d.buyer ? `${d.buyer}, ` : ""}invoice {d.invoice} · AED {amt(d.amount)}
+              {d.others.length ? ` (incl. lot${d.others.length === 1 ? "" : "s"} ${d.others.join(", ")}, not yours)` : ""}
+            </span>
+          ))}
+          .
+        </p>
+      ) : null}
       {!listing && !own ? (
         <div className="doc-foot">
           <div className="doc-pay">
             <p>{sold.length} of {lots.length} sold.</p>
-            {left > 0.005 ? <p><b>AED {amt(left)} still to settle</b> for this auction, once each buyer has paid.</p> : <p><b>This auction is settled.</b></p>}
-            {Math.abs(account.held) > 0.005 ? (
+            {fig.balance > 0.005 ? (
               <p>
-                {account.held > 0
-                  ? <>Buyers paid you <b>AED {amt(account.held)}</b> directly that hasn&apos;t been settled yet (for your watches or others&apos;): it comes off what we pay you.</>
-                  : <>We also owe you <b>AED {amt(-account.held)}</b> on your account.</>}
+                <b>We still owe you AED {amt(fig.balance)}</b> for this auction.
+                {fig.waiting > 0.005 ? ` AED ${amt(fig.waiting)} of it is for watches whose buyer hasn't paid yet: we pay it once they do.` : ""}
+              </p>
+            ) : fig.balance < -0.005 ? (
+              <p>
+                <b>You owe us AED {amt(-fig.balance)}</b> for this auction: buyers paid you more than your watches here came to (it includes watches that weren&apos;t yours). It comes off your next payout, or please transfer it to us.
+              </p>
+            ) : (
+              <p><b>This auction is settled.</b></p>
+            )}
+            {Math.abs(account.owed - fig.balance) > 0.005 ? (
+              <p>
+                <b>Your account, all auctions: {account.owed >= -0.005 ? `we owe you AED ${amt(Math.max(0, account.owed))}` : `you owe us AED ${amt(-account.owed)}`}.</b>{" "}
+                <span className="fine">It includes your other auctions; the account statement lists every line.</span>
               </p>
             ) : null}
-            <p>
-              <b>Your account, all auctions: {account.owed >= 0 ? `we owe you AED ${amt(account.owed)}` : `you owe us AED ${amt(-account.owed)}`}.</b>
-            </p>
           </div>
           <table className="doc-totals">
             <tbody>
-              <tr><td>Hammer total</td><td className="n">{amt(sum(l => l.hammer || 0))}</td></tr>
-              <tr><td>Seller fees</td><td className="n">−{amt(sum(l => l.fee))}</td></tr>
-              {s.vat_fee_pct ? <tr><td>VAT on fees</td><td className="n">−{amt(sum(l => l.vatFee))}</td></tr> : null}
-              <tr className="tot"><td>Net to you</td><td className="n">{amt(net)}</td></tr>
-              <tr><td>Settled already</td><td className="n">{settled ? `−${amt(r(settled))}` : "0"}</td></tr>
-              <tr className="tot"><td>Still to settle</td><td className="n">{amt(left)}</td></tr>
+              <tr><td>Hammer total</td><td className="n">{amt(fig.hammer)}</td></tr>
+              <tr><td>Seller fees</td><td className="n">−{amt(fig.fees)}</td></tr>
+              {s.vat_fee_pct ? <tr><td>VAT on fees</td><td className="n">−{amt(fig.vatFees)}</td></tr> : null}
+              <tr className="tot"><td>Net to you</td><td className="n">{amt(fig.net)}</td></tr>
+              {fig.direct ? <tr><td>Paid to you directly by buyers</td><td className="n">{minus(fig.direct)}</td></tr> : null}
+              <tr><td>{fig.paidByUs < -0.005 ? "You paid us when settling" : "Paid to you by us"}</td><td className="n">{minus(fig.paidByUs)}</td></tr>
+              <tr className="tot"><td>{fig.balance < -0.005 ? "You owe us" : "Still to pay you"}</td><td className="n">{amt(Math.abs(fig.balance))}</td></tr>
             </tbody>
           </table>
         </div>
       ) : null}
-      {s.seller_terms ? <p className="doc-terms">{s.seller_terms}</p> : null}
-      {listing ? <Signatures left="Seller's signature" right={`For ${s.trading_name || "The Time Souk"}`} /> : null}
+      {!listing && own ? (
+        <div className="doc-foot">
+          <div className="doc-pay">
+            <p>{sold.length} of {lots.length} sold.</p>
+            {fig.unpaidHammer > 0.005 ? <p><b>AED {amt(fig.unpaidHammer)}</b> of it is on invoices the buyer hasn&apos;t paid in full yet.</p> : sold.length ? <p>Every buyer has paid.</p> : null}
+            {fig.costMissing ? <p className="fine">{fig.costMissing} sold watch{fig.costMissing === 1 ? " has" : "es have"} no cost typed (Lots › Lot details): the profit counts {fig.costMissing === 1 ? "it" : "them"} at no cost.</p> : null}
+          </div>
+          <table className="doc-totals">
+            <tbody>
+              <tr className="tot"><td>Sold for (hammer)</td><td className="n">{amt(fig.hammer)}</td></tr>
+              <tr><td>Cost of the watches sold</td><td className="n">−{amt(fig.cost)}</td></tr>
+              <tr className="tot"><td>Profit</td><td className="n">{amt(fig.profit)}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+      {s.seller_terms && !own ? <p className="doc-terms">{s.seller_terms}</p> : null}
+      {listing && !own ? <Signatures left="Seller's signature" right={`For ${s.trading_name || "The Time Souk"}`} /> : null}
     </article>
   );
 }

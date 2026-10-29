@@ -262,3 +262,32 @@ test("delivery for a whole invoice: every lot together, the date kept or cleared
   assert.equal(D.isDeliveryStep("Done"), true);
   assert.equal(D.isDeliveryStep("Lost"), false);
 });
+
+test("auction statements take off what buyers paid the seller directly, and add up to the seller's account", () => {
+  const o = E.compute(extras());
+  const a1 = o.data.auctions.find(a => a.number === 1);
+  const f = SA.auctionFigures(o, a1.id, "sS1");
+  assert.ok(f.direct > 0, "a buyer paid S001 directly in auction 1");
+  assert.equal(f.directs.length, 1);
+  assert.equal(f.balance, Math.round((f.net - f.direct - f.paidByUs) * 100) / 100);
+  assert.ok(f.balance < f.net, "the direct payment comes off what's still owed");
+  assert.ok(f.directInvoices.has(f.directs[0].invoice.toUpperCase()));
+  // every consignor: the auctions' balances, less settlements on account, make the seller's balance
+  for (const s of o.sellers.filter(x => x.kind !== "own" && !x.demo)) {
+    const total = o.data.auctions.filter(a => !a.demo).reduce((t, a) => t + (SA.auctionFigures(o, a.id, s.id)?.balance || 0), 0);
+    const settled = (o.data.settlements || []).filter(x => x.seller_id === s.id).reduce((t, x) => t + Number(x.amount), 0);
+    assert.equal(Math.round((total - settled) * 100) / 100, s.owed, `${s.code}`);
+  }
+});
+
+test("own stock (TS) statements total the hammer, the cost and the profit", () => {
+  const o = E.compute(extras());
+  const a1 = o.data.auctions.find(a => a.number === 1);
+  const f = SA.auctionFigures(o, a1.id, "sTS");
+  assert.ok(f && f.sold.length > 0);
+  assert.equal(f.hammer, f.sold.reduce((t, l) => t + Number(l.hammer), 0));
+  assert.equal(f.profit, Math.round((f.hammer - f.cost) * 100) / 100);
+  assert.equal(f.net, 0, "no fee or payout for our own watches");
+  assert.equal(f.unpaidHammer, f.sold.filter(l => o.invoicesByNo.get(l.invoiceNo).balance > 0.005).reduce((t, l) => t + Number(l.hammer), 0));
+  for (const l of f.sold) assert.ok(f.buyer.get(l.id), `${l.key} shows its buyer`);
+});
