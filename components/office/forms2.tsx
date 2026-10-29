@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Msg, useAction } from "@/components/admin/ui";
 import {
-  addIntakeLines, addToAuction, createCardLink, markSellerPaid, newIntake, saveAuctionOffice, saveIntakeItem, savePastedLink, saveSeller,
-  type IntakeLine, type SellerInput
+  addIntakeLines, addToAuction, createCardLink, markSellerPaid, newIntake, recordSettlement, saveAuctionOffice, saveIntakeItem, savePastedLink, saveSeller,
+  type IntakeLine, type SellerInput, type SettlementInput
 } from "@/app/(admin)/admin/office/actions2";
 import { BOX_PAPERS, CONDITIONS, type MessageOverrides, type OfficeSettings } from "@/lib/office/types";
 import { Wording, cardLinkMessage, type Code } from "@/lib/office/messages";
@@ -65,15 +65,15 @@ export function NewSeller() {
   );
 }
 
-export type PayoutLot = { id: string; key: string; watch: string; net: number; invoice: string; state: string; settle: SettleLot | null; direct: number };
+export type PayoutLot = { id: string; key: string; watch: string; net: number; invoice: string; state: string; settle: SettleLot | null };
 
 const money = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 2 });
 
 /**
- * Tick the lots you've settled with the seller, then mark them paid. A buyer who paid the seller directly
- * comes off the amount; if that's more than the seller's net, the seller pays us the difference.
+ * Tick the lots you've settled with the seller, then mark them paid. Money the seller holds for us (buyers who paid them
+ * directly, for any lot) comes off the amount; if it's more than what's owed, the seller pays us the difference.
  */
-export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots: PayoutLot[]; accounts?: { code: string; name: string }[]; defaultAccount?: string }) {
+export function PayoutForm({ lots, held = 0, accounts = [], defaultAccount = "" }: { lots: PayoutLot[]; held?: number; accounts?: { code: string; name: string }[]; defaultAccount?: string }) {
   const [pick, setPick] = useState<string[]>(lots.filter(l => l.state === "Due to seller" || l.state === "Seller owes us").map(l => l.id));
   const [date, setDate] = useState(today());
   const [ref, setRef] = useState("");
@@ -82,13 +82,20 @@ export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots:
   const chosen = lots.filter(l => pick.includes(l.id));
   const cash = settleCash(chosen.map(l => l.settle).filter((x): x is SettleLot => !!x));
   const total = Math.round(chosen.reduce((t, l) => t + (cash.get(l.id) ?? l.net), 0) * 100) / 100;
-  const anyDirect = lots.some(l => l.direct);
-  if (!lots.length) return <p className="fine">Nothing owed to this seller.</p>;
+  const netting = Math.abs(held) > 0.005;
+  if (!lots.length) return <p className="fine">No sold lots waiting to be settled with this seller.</p>;
   return (
     <div className="stack" style={{ gap: 10 }}>
+      {netting ? (
+        <p className="alert info">
+          {held > 0
+            ? <>This seller holds <b>AED {money(held)}</b> of ours (buyers who paid them directly). It comes off what you pay them below.</>
+            : <>We owe this seller <b>AED {money(-held)}</b> on top of their lots (paid back too much). It&apos;s added below.</>}
+        </p>
+      ) : null}
       <div className="tbl-wrap">
         <table>
-          <thead><tr><th /><th>Lot</th><th>Watch</th><th>Invoice</th><th className="n">Net</th>{anyDirect ? <th className="n">Buyer paid seller</th> : null}{anyDirect ? <th className="n">To settle</th> : null}<th>State</th></tr></thead>
+          <thead><tr><th /><th>Lot</th><th>Watch</th><th>Invoice</th><th className="n">Net</th>{netting ? <th className="n">To settle</th> : null}<th>State</th></tr></thead>
           <tbody>
             {lots.map(l => (
               <tr key={l.id}>
@@ -97,8 +104,7 @@ export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots:
                 <td>{l.watch}</td>
                 <td className="mono">{l.invoice}</td>
                 <td className="n">{money(l.net)}</td>
-                {anyDirect ? <td className="n">{l.direct ? money(l.direct) : ""}</td> : null}
-                {anyDirect ? <td className="n">{pick.includes(l.id) ? money(cash.get(l.id) ?? l.net) : ""}</td> : null}
+                {netting ? <td className="n">{pick.includes(l.id) ? money(cash.get(l.id) ?? l.net) : ""}</td> : null}
                 <td className={l.state === "Due to seller" ? "ok-ink" : l.state === "Seller owes us" ? "warn-ink" : "fine"}>{l.state}</td>
               </tr>
             ))}
@@ -120,10 +126,42 @@ export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots:
       </div>
       <p className="fine">
         Lots marked &ldquo;Wait&rdquo; haven&apos;t been paid for by the buyer yet.
-        {anyDirect ? " Where a buyer paid the seller directly, that comes off what you pay; if it's more than the seller's net, they owe us the difference: mark it settled once they've paid it." : ""}
+        {netting ? " Ticking only some lots: each stays at 0 or more, and what's left of the money they hold comes off the next payout." : ""}
       </p>
       <Msg r={msg} />
     </div>
+  );
+}
+
+/** Settle up outside a lot payout: the seller pays us back what buyers paid them for others, or we pay them on account. */
+export function SettlementForm({ sellerId, owed, accounts = [], defaultAccount = "" }: { sellerId: string; owed: number; accounts?: { code: string; name: string }[]; defaultAccount?: string }) {
+  const [v, setV] = useState<SettlementInput>({
+    seller_id: sellerId, direction: owed < 0 ? "paid_us" : "we_paid", amount: owed ? String(Math.abs(owed)) : "", date: today(), account: defaultAccount, reference: "", notes: ""
+  });
+  const { pending, msg, run } = useAction();
+  const f = (k: keyof SettlementInput) => ({ value: v[k], onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setV({ ...v, [k]: e.target.value }) });
+  return (
+    <form className="stack" style={{ gap: 10 }} onSubmit={e => { e.preventDefault(); run(() => recordSettlement(v)); }}>
+      <div className="form-grid tight">
+        <label className="field">What happened
+          <select {...f("direction")}>
+            <option value="paid_us">The seller paid us</option>
+            <option value="we_paid">We paid the seller (on account)</option>
+          </select>
+        </label>
+        <label className="field">Amount (AED)<input required inputMode="decimal" {...f("amount")} /></label>
+        <label className="field">Date<input type="date" {...f("date")} /></label>
+        {accounts.length ? (
+          <label className="field">{v.direction === "paid_us" ? "Received into" : "Paid from"}
+            <select {...f("account")}>{accounts.map(a => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}</select>
+          </label>
+        ) : null}
+        <label className="field">Reference<input {...f("reference")} /></label>
+        <label className="field wide">Notes<input placeholder="e.g. what buyer B0012 paid them for lot 101-07" {...f("notes")} /></label>
+      </div>
+      <div className="row"><button className="btn pri" disabled={pending}>{pending ? "Saving…" : "Record"}</button></div>
+      <Msg r={msg} />
+    </form>
   );
 }
 

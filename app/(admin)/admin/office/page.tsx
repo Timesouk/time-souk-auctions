@@ -66,6 +66,7 @@ export default async function OfficeHome({ searchParams }: { searchParams: Promi
               <div className="row">
                 <Link className="btn sm" href={`/admin/office/lots${q}`}>Lots &amp; results</Link>
                 <Link className="btn sm" href={`/admin/office/invoices${q}`}>Invoices</Link>
+                {invs.length ? <Link className="btn sm" href={`/admin/office/invoices/print${q}`}>Print all {invs.length} invoices</Link> : null}
               </div>
             </div>
             <div className="stats">

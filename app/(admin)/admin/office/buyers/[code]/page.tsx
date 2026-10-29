@@ -7,6 +7,8 @@ import { CustomerForm, DeleteEntry, EntryForm } from "@/components/office/forms"
 import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
 import { UAE } from "@/lib/office/types";
+import { ConfirmRun } from "@/components/office/ConfirmRun";
+import { deleteCustomer } from "../../actions";
 
 export const dynamic = "force-dynamic";
 
@@ -111,6 +113,18 @@ export default async function OfficeBuyer({ params }: { params: Promise<{ code: 
           {c.depositHeld > 0.005 ? (
             <div className="panel-card">
               <EntryForm kind="Refund" title={`Refund deposit · AED ${amt(c.depositHeld)} held`} customerId={c.id} amount={c.depositHeld} method={lastDepositMethod} lockBuyer confirm={confirm} />
+            </div>
+          ) : null}
+          {admin ? (
+            <div className="panel-card">
+              <span className="k">Delete this buyer</span>
+              <p className="fine">
+                Added by mistake? Only a buyer who hasn&apos;t won a lot and has no payments, deposits or refunds can be deleted.
+                {won.length || entries.length ? ` This one has ${won.length ? `${won.length} lot${won.length === 1 ? "" : "s"} won` : ""}${won.length && entries.length ? " and " : ""}${entries.length ? `${entries.length} payment${entries.length === 1 ? "" : "s"}` : ""}.` : ""} Admins only.
+              </p>
+              <div className="row">
+                <ConfirmRun label={`Delete buyer ${c.code}`} className="btn danger" ask={`Are you sure you want to delete buyer ${c.code}${c.instagram ? ` (@${c.instagram})` : ""}?\n\nThis can't be undone.`} run={deleteCustomer.bind(null, c.id)} then="/admin/office/buyers" />
+              </div>
             </div>
           ) : null}
         </aside>

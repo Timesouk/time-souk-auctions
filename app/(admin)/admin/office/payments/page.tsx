@@ -26,7 +26,7 @@ export default async function OfficePayments({ searchParams }: { searchParams: P
     .slice()
     .reverse();
   const buyers = o.data.customers.map(c => ({ id: c.id, label: `${c.code} · ${c.full_name || ""}${c.instagram ? ` @${c.instagram}` : ""}${c.demo ? " (demo)" : ""}`.trim() }));
-  const consignors = o.data.sellers.filter(x => x.kind !== "own").map(x => ({ id: x.id, label: `${x.code} · ${x.name}` }));
+  const consignors = o.data.sellers.filter(x => x.kind !== "own").map(x => ({ id: x.id, label: `${x.code} · ${x.name}${x.demo ? " (demo)" : ""}` }));
   // totals leave out the demo (training) auction
   const sum = (k: string) => o.ledger.filter(e => e.kind === k && !e.demo).reduce((t, e) => t + e.amount, 0);
   return (

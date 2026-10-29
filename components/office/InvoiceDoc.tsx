@@ -5,12 +5,13 @@ import { dateText, pctText } from "@/lib/office/messages";
 import { COD, UAE, type OfficeSettings } from "@/lib/office/types";
 import { DocHead, dubaiStamp } from "./DocHead";
 
-export function InvoiceDoc({ inv, s }: { inv: InvoiceView; s: OfficeSettings }) {
+/** `page`: one of several printed together, so each starts on a new sheet. */
+export function InvoiceDoc({ inv, s, page }: { inv: InvoiceView; s: OfficeSettings; page?: boolean }) {
   const c = inv.customer;
   const rate = (s.card_fee_pct || 0) / 100;
   const paid = inv.balance <= 0;
   return (
-    <article className="doc">
+    <article className={page ? "doc doc-page" : "doc"}>
       <DocHead s={s} />
 
       <div className="doc-title">

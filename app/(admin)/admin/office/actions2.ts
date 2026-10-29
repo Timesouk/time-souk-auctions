@@ -94,6 +94,74 @@ export async function saveSeller(input: SellerInput) {
 }
 
 /**
+ * Deletes a seller added by mistake (admin only). Refused while they have lots, intake receipts, payments made to them
+ * directly by buyers, or settlements: those keep the seller on record.
+ */
+export async function deleteSeller(id: string) {
+  return guard(async () => {
+    const db = adminClient();
+    const { data: x, error } = await db.from("sellers").select("id, code, name, demo").eq("id", id).maybeSingle();
+    if (error) return bad(error.message);
+    if (!x) return bad("That seller isn't there any more.");
+    if (x.demo) return bad("This is a demo seller: remove the demo under Settings › Demo auction.");
+    const [{ data: lots }, { data: intake }, { data: direct }] = await Promise.all([
+      db.from("lot_private").select("lot_id").eq("seller_id", id),
+      db.from("intake_items").select("receipt_no").eq("seller_id", id),
+      db.from("ledger").select("id").eq("paid_to_seller_id", id)
+    ]);
+    if (lots?.length) return bad(`${x.code} has ${lots.length} lot${lots.length === 1 ? "" : "s"}. Give them another seller (Lots › Lot details) or delete them first.`);
+    if (intake?.length) return bad(`${x.code} has intake receipt${new Set(intake.map(i => i.receipt_no)).size === 1 ? "" : "s"} ${[...new Set(intake.map(i => i.receipt_no))].join(", ")}, so they stay on record.`);
+    if (direct?.length) return bad(`Buyers paid ${x.code} directly (${direct.length} payment${direct.length === 1 ? "" : "s"}). Remove those on Payments first, or keep the seller.`);
+    const { data: settled, error: se } = await db.from("seller_settlements").select("id").eq("seller_id", id).limit(1);
+    if (!se && settled?.length) return bad(`${x.code} has settlements on their account, so they stay on record.`);
+    const { error: e2 } = await db.from("sellers").delete().eq("id", id);
+    if (e2) return bad(e2.message);
+    refresh();
+    return ok(`Seller ${x.code} · ${x.name} deleted.`);
+  }, true);
+}
+
+export type SettlementInput = { seller_id: string; direction: "paid_us" | "we_paid"; amount: string; date: string; account: string; reference: string; notes: string };
+
+/** Money settled with a seller outside a lot payout: they paid us back what buyers paid them for others, or we paid them on account. */
+export async function recordSettlement(input: SettlementInput) {
+  return guard(async staff => {
+    const amt = amount(input.amount);
+    if (!amt || amt <= 0) return bad("Type the amount.");
+    if (amt > 5000000) return bad("That amount looks too large.");
+    const date = ymd(input.date) || today();
+    const lock = await booksClosedUpTo();
+    if (lock && date <= lock) return bad(closedMessage(lock));
+    const db = adminClient();
+    const { data: x } = await db.from("sellers").select("id, code, kind").eq("id", input.seller_id).maybeSingle();
+    if (!x) return bad("Choose the seller.");
+    if (x.kind === "own") return bad("That's our own stock.");
+    const signed = input.direction === "we_paid" ? amt : -amt;
+    const { error } = await db.from("seller_settlements").insert({
+      seller_id: x.id, entry_date: date, amount: signed, account_code: str(input.account, 6), reference: str(input.reference, 120), notes: str(input.notes, 300), created_by: staff.id
+    });
+    if (error) return bad(/seller_settlements/.test(error.message) ? "Run supabase/migrations/0009_seller_settlements.sql in Supabase first." : error.message);
+    refresh();
+    return ok(signed < 0 ? `Recorded: ${x.code} paid us AED ${amt.toLocaleString("en-US")}.` : `Recorded: we paid ${x.code} AED ${amt.toLocaleString("en-US")} on account.`);
+  });
+}
+
+/** Removes a settlement typed by mistake (admin only). */
+export async function deleteSettlement(id: string) {
+  return guard(async () => {
+    const db = adminClient();
+    const { data: row } = await db.from("seller_settlements").select("entry_date").eq("id", id).maybeSingle();
+    if (!row) return bad("That settlement isn't there any more.");
+    const lock = await booksClosedUpTo();
+    if (lock && row.entry_date <= lock) return bad(closedMessage(lock));
+    const { error } = await db.from("seller_settlements").delete().eq("id", id);
+    if (error) return bad(error.message);
+    refresh();
+    return ok("Removed.");
+  }, true);
+}
+
+/**
  * Settles sold lots with their seller. Each lot remembers the cash that moved: its net, less anything the buyer paid
  * the seller directly (which can leave the seller owing us the difference: a negative amount, money in).
  */

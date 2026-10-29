@@ -112,6 +112,10 @@ async function clearDemo(db: Db, auction: { id: string; number: number } | null,
     steps.push(await db.from("card_links").delete().in("customer_id", buyerIds));
   }
   if (sellerIds.length) steps.push(await db.from("ledger").delete().in("paid_to_seller_id", sellerIds));
+  if (sellerIds.length) {
+    const r = await db.from("seller_settlements").delete().in("seller_id", sellerIds);
+    if (r.error && !/seller_settlements/.test(r.error.message)) steps.push(r); // before 0009 there's nothing to clear
+  }
   if (auction) steps.push(await db.from("lots").delete().eq("auction_id", auction.id));
   if (sellerIds.length) steps.push(await db.from("intake_items").delete().in("seller_id", sellerIds));
   if (buyerIds.length) steps.push(await db.from("customers").delete().eq("demo", true));
