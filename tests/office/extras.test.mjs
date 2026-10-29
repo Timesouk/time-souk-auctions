@@ -147,7 +147,7 @@ test("a seller's account statement adds up to what they're owed", () => {
 });
 
 test("settling with money held: it comes off in order, a lot never goes negative while others stay open", () => {
-  const g = (id, order, net, held = 5000) => ({ id, seller: "s", order, net, held, sellerUnpaid: 2 });
+  const g = (id, order, net, held = 5000) => ({ id, seller: "s", order, net, sellerUnpaid: 2, own: 0, ownOn: null, pool: [{ on: "2026-10-01", amount: held }] });
   // both lots settled together: 3,000 + 2,500 net, 5,000 held → 0 and 500
   let c = E.settleCash([g("b", 2, 2500), g("a", 1, 3000)]);
   assert.equal(c.get("a"), 0);
@@ -160,8 +160,11 @@ test("settling with money held: it comes off in order, a lot never goes negative
   assert.equal(c.get("a"), 0);
   assert.equal(c.get("b"), -500);
   // nothing held: the net
-  c = E.settleCash([{ id: "x", seller: "t", order: 1, net: 900, held: 0, sellerUnpaid: 1 }]);
+  c = E.settleCash([{ id: "x", seller: "t", order: 1, net: 900, sellerUnpaid: 1, own: 0, ownOn: null, pool: [] }]);
   assert.equal(c.get("x"), 900);
+  // money they got after the payout date isn't taken off; nor is anything when staff say they paid in full
+  assert.equal(E.settleCash([g("a", 1, 3000)], "2026-09-30").get("a"), 3000);
+  assert.equal(E.settleCash([g("a", 1, 3000)], "2026-10-02", false).get("a"), 3000);
 });
 
 test("trays: a buyer with more than one lot gets one tray; others keep theirs", () => {
@@ -261,4 +264,218 @@ test("delivery for a whole invoice: every lot together, the date kept or cleared
   assert.equal(D.stillOwes({ paysBy: "Bank transfer", balance: 500 }), 500);
   assert.equal(D.isDeliveryStep("Done"), true);
   assert.equal(D.isDeliveryStep("Lost"), false);
+});
+
+test("auction statements: now (buyers who have paid) and once every buyer has paid, adding up to the seller's account", () => {
+  const o = E.compute(extras());
+  const a1 = o.data.auctions.find(a => a.number === 1);
+  const f = SA.auctionFigures(o, a1.id, "sS1");
+  // S001 in auction 1: 1-09 (buyer paid S001 4,000 directly + us the rest), 1-01 and 1-05 not paid yet
+  assert.equal(f.splits.length, 1);
+  assert.equal(f.direct, 4000);
+  assert.equal(f.netReady, 3700, "only 1-09's buyer has paid");
+  assert.equal(f.balanceNow, -300, "they hold our 300 fee on 1-09");
+  assert.equal(f.balance, Math.round((f.net - f.direct - f.paidByUs) * 100) / 100);
+  assert.deepEqual(f.waitingRows.map(r => r.lot.key), ["1-01", "1-05"]);
+  assert.equal(f.waiting, Math.round((f.net - 3700) * 100) / 100);
+  const byKey = new Map(f.rows.map(r => [r.lot.key, r]));
+  assert.equal(byKey.get("1-09").toYou, "Already with you (the buyer paid you)");
+  assert.equal(byKey.get("1-09").buyerPaid, "Paid (part to you directly)");
+  assert.equal(byKey.get("1-01").toYou, "When the buyer pays");
+  assert.match(byKey.get("1-05").buyerPaid, /Cash on delivery/);
+  // what the 4,000 was for: their share of 1-09 (3,700) and our fee (300)
+  const d = f.splits[0];
+  assert.equal(d.yours, 3700);
+  assert.equal(d.oursFee, 300);
+  assert.equal(d.oursCharges + d.oursOthers, 0);
+  // every consignor: the auctions' balances, less settlements on account, make the seller's balance
+  for (const s of o.sellers.filter(x => x.kind !== "own" && !x.demo)) {
+    const total = o.data.auctions.filter(a => !a.demo).reduce((t, a) => t + (SA.auctionFigures(o, a.id, s.id)?.balance || 0), 0);
+    const settled = (o.data.settlements || []).filter(x => x.seller_id === s.id).reduce((t, x) => t + Number(x.amount), 0);
+    assert.equal(Math.round((total - settled) * 100) / 100, s.owed, `${s.code}`);
+  }
+});
+
+test("delivery and other watches paid to the seller directly are shown as ours", () => {
+  const withPays = (toSeller, toUs) => {
+    const data = extras();
+    data.ledger.find(e => e.id === "p4").amount = toSeller;
+    const p5 = data.ledger.find(e => e.id === "p5");
+    if (toUs) p5.amount = toUs;
+    else data.ledger = data.ledger.filter(e => e.id !== "p5");
+    const o = E.compute(data);
+    return { o, f: SA.auctionFigures(o, o.data.auctions.find(a => a.number === 1).id, "sS1") };
+  };
+  // the buyer paid the seller their watch and the delivery (4,030), and us our own watch (3,900)
+  let { o, f } = withPays(4030, 3900);
+  let d = f.splits[0];
+  assert.deepEqual([d.yours, d.oursFee, d.oursCharges, d.oursOthers], [3700, 300, 30, 0]);
+  assert.match(SA.oursText(d), /our fee on your watch \(300\) and delivery \(30\)/);
+  assert.ok(d.items.some(i => i.label === "Delivery" && i.amount === 30));
+  assert.ok(d.items.some(i => /1-08 .*not yours: our own stock/.test(i.label)));
+  assert.equal(f.balanceNow, -330);
+  // the buyer paid the seller the whole invoice (7,930): our watch 1-08 is in their hands too
+  ({ o, f } = withPays(7930, 0));
+  d = f.splits[0];
+  assert.deepEqual([d.yours, d.oursFee, d.oursCharges, d.oursOthers], [3700, 300, 30, 3900]);
+  assert.equal(d.paidToUs, 0);
+  assert.equal(f.balanceNow, -4230);
+  // the account statement explains the same split
+  const acct = SA.sellerAccount(o, "sS1");
+  assert.match(acct.lines.find(l => l.kind === "direct").note, /yours 3,700; ours 4,230/);
+});
+
+test("money paid to the seller on an invoice the buyer hasn't finished paying waits with it", () => {
+  const data = extras();
+  data.ledger.find(e => e.id === "p5").amount = 3000; // the buyer still owes us 930
+  const o = E.compute(data);
+  const f = SA.auctionFigures(o, o.data.auctions.find(a => a.number === 1).id, "sS1");
+  assert.equal(f.splits[0].ready, false);
+  assert.equal(f.splits[0].stillToPay, 930);
+  assert.equal(f.directNow, 0);
+  assert.equal(f.netReady, 0);
+  assert.equal(f.balanceNow, 0, "nothing is due either way until the buyer finishes paying");
+  assert.equal(f.balance, Math.round((f.net - 4000) * 100) / 100);
+  assert.ok(f.waitingRows.some(r => r.lot.key === "1-09"));
+});
+
+test("own stock (TS) statements total the hammer, the cost and the profit", () => {
+  const o = E.compute(extras());
+  const a1 = o.data.auctions.find(a => a.number === 1);
+  const f = SA.auctionFigures(o, a1.id, "sTS");
+  assert.ok(f && f.sold.length > 0);
+  assert.equal(f.hammer, f.sold.reduce((t, l) => t + Number(l.hammer), 0));
+  assert.equal(f.profit, Math.round((f.hammer - f.cost) * 100) / 100);
+  assert.equal(f.net, 0, "no fee or payout for our own watches");
+  assert.equal(f.unpaidHammer, f.sold.filter(l => o.invoicesByNo.get(l.invoiceNo).balance > 0.005).reduce((t, l) => t + Number(l.hammer), 0));
+  for (const l of f.sold) assert.ok(f.buyer.get(l.id), `${l.key} shows its buyer`);
+});
+
+test("a seller with nothing in the auction still gets a statement when one of its buyers paid them", () => {
+  const data = extras();
+  data.sellers.push({ id: "sS3", code: "S003", name: "Sample Consignor Three", kind: "consignment", phone: "", instagram: "", email: "", id_checked: "", fee_pct: null, fee_fixed: null, bank: "", iban: "", notes: "" });
+  // B0004 owes 7,460 for our own watch 1-04 and pays all of it to S003, a seller they know
+  data.ledger.push({ id: "p9", seq: 9, entry_date: "2026-10-27", kind: "Payment", customer_id: "cB0004", invoice_no: "TS001-B0004", method: T.DIRECT, amount: 7460, reference: "", received_by: "", notes: "", created_at: "2026-10-27T10:00:00Z", paid_to_seller_id: "sS3" });
+  const o = E.compute(data);
+  const a1 = o.data.auctions.find(a => a.number === 1);
+  assert.ok(SA.sellersInAuction(o, a1.id).includes("sS3"));
+  const f = SA.auctionFigures(o, a1.id, "sS3");
+  assert.equal(f.lots.length, 0);
+  assert.equal(f.splits[0].yours, 0);
+  assert.equal(f.splits[0].ours, 7460);
+  assert.equal(f.balanceNow, -7460, "the invoice is paid in full, so they owe it to us now");
+  const s3 = o.sellersById.get("sS3");
+  assert.equal(s3.owed, -7460);
+  assert.deepEqual(SA.sellerNowAndLater(o, "sS3"), { now: -7460, later: -7460 });
+  // and every consignor's "once every buyer has paid" is what the seller page calls owed
+  for (const s of o.sellers.filter(x => x.kind !== "own" && !x.demo)) assert.equal(SA.sellerNowAndLater(o, s.id).later, s.owed, s.code);
+});
+
+test("money a seller held from one auction's buyers that settled their lot in another auction shows on both statements", () => {
+  const build = settle => {
+    const data = extras();
+    const a2 = data.auctions.find(a => a.number === 2);
+    a2.sale_date = "2026-10-27";
+    a2.status = "closed";
+    // B0006 paid S001 the whole of invoice TS001-B0006 (S001's watch, our own watch and delivery): S001 holds 4,230 of ours
+    data.ledger.find(e => e.id === "p4").amount = 7930;
+    data.ledger = data.ledger.filter(e => e.id !== "p5");
+    // in auction 2, S001's lot 2-05 sells to B0002, who pays us in full
+    const lot = data.lots.find(l => l.id === "l2-5");
+    Object.assign(lot, { hammer: 2900, winner_customer_id: "cB0002", winner_text: "B0002" });
+    let o = E.compute(data);
+    const inv = o.invoicesByNo.get(o.lotsById.get("l2-5").invoiceNo);
+    data.ledger.push({ id: "p10", seq: 10, entry_date: "2026-10-27", kind: "Payment", customer_id: "cB0002", invoice_no: inv.no, method: "Bank transfer", amount: inv.total, reference: "", received_by: "", notes: "", created_at: "2026-10-27T10:00:00Z" });
+    if (settle) {
+      // Sellers › S001 › Payouts: tick lot 2-05 only; what S001 holds comes off it, so no cash moves
+      o = E.compute(data);
+      const l = o.lotsById.get("l2-5");
+      const cash = E.settleCash([l.settle]).get(l.id);
+      Object.assign(lot, { seller_paid_on: "2026-10-28", payout_amount: cash });
+    }
+    return E.compute(data);
+  };
+  const o = build(true);
+  const a1 = o.data.auctions.find(a => a.number === 1).id;
+  const a2 = o.data.auctions.find(a => a.number === 2).id;
+  const net25 = o.lotsById.get("l2-5").net;
+  assert.equal(Number(o.lotsById.get("l2-5").payout_amount), 0, "no cash: settled from what they held");
+  const f2 = SA.auctionFigures(o, a2, "sS1");
+  assert.equal(f2.settledFromElsewhere, net25);
+  assert.equal(f2.balance, 0, "auction 2 is settled, not 'we owe you'");
+  assert.equal(f2.balanceNow, 0);
+  assert.equal(f2.setoffsIn[0].fromAuctionId, a1);
+  assert.equal(f2.setoffsIn[0].toLot, "2-05");
+  const f1 = SA.auctionFigures(o, a1, "sS1");
+  assert.equal(f1.usedElsewhere, net25);
+  assert.equal(f1.balance, Math.round((f1.net - 7930 + net25) * 100) / 100);
+  const s1 = o.sellersById.get("sS1");
+  const all = SA.sellerNowAndLater(o, "sS1");
+  assert.equal(all.later, s1.owed);
+  assert.equal(Math.round((f1.balance + f2.balance) * 100) / 100, s1.owed);
+  assert.equal(SA.sellerAuctions(o, "sS1").onAccount, 0);
+  // now: they still hold 4,230 − what settled 2-05 of ours, less their share of 1-09
+  assert.equal(all.now, Math.round((3700 - 7930 + net25) * 100) / 100);
+  // before it was settled, auction 2 was simply owed to them
+  const before = build(false);
+  assert.equal(SA.auctionFigures(before, a2, "sS1").balance, net25);
+});
+
+test("a seller paying us back, or us paying them on account, lands on the right auction or on account", () => {
+  const data = extras();
+  data.ledger.find(e => e.id === "p4").amount = 7930;
+  data.ledger = data.ledger.filter(e => e.id !== "p5");
+  data.settlements = [
+    { id: "st1", seller_id: "sS1", entry_date: "2026-10-28", amount: -1000, account_code: "1020", reference: "", notes: "", created_at: "2026-10-28T10:00:00Z" },
+    { id: "st2", seller_id: "sS2", entry_date: "2026-10-28", amount: 500, account_code: "1020", reference: "", notes: "", created_at: "2026-10-28T10:00:00Z" }
+  ];
+  const o = E.compute(data);
+  const a1 = o.data.auctions.find(a => a.number === 1).id;
+  const f1 = SA.auctionFigures(o, a1, "sS1");
+  assert.equal(f1.setoffsOut[0].toAuctionId, null, "paid back: counted against auction 1, where they held our money");
+  assert.equal(f1.usedElsewhere, 1000);
+  for (const id of ["sS1", "sS2"]) assert.equal(SA.sellerNowAndLater(o, id).later, o.sellersById.get(id).owed, id);
+  assert.equal(SA.sellerAuctions(o, "sS1").onAccount, 0);
+  assert.equal(SA.sellerAuctions(o, "sS2").onAccount, -500, "we paid S002 500 on account, not yet used");
+});
+
+test("paying an earlier auction doesn't take a later buyer's direct payment off it", () => {
+  const data = sampleOffice(NOW);
+  const a2 = data.auctions.find(a => a.number === 2);
+  a2.sale_date = "2026-10-27";
+  a2.status = "closed";
+  let o = E.compute(data);
+  let seq = 20;
+  // every auction-1 buyer paid us
+  for (const inv of o.invoices.filter(i => i.auctionNo === 1 && i.balance > 0)) {
+    data.ledger.push({ id: `x${seq}`, seq: seq++, entry_date: "2026-10-26", kind: "Payment", customer_id: inv.customer.id, invoice_no: inv.no, method: "Bank transfer", amount: inv.balance, reference: "", received_by: "", notes: "", created_at: "2026-10-26T10:00:00Z" });
+  }
+  // auction 2: S001's watch 2-05 sells; its buyer pays S001 directly, hammer and delivery, on 28 Oct
+  Object.assign(data.lots.find(l => l.id === "l2-5"), { hammer: 3100, winner_customer_id: "cB0002", winner_text: "B0002" });
+  o = E.compute(data);
+  const inv2 = o.invoicesByNo.get(o.lotsById.get("l2-5").invoiceNo);
+  data.ledger.push({ id: "d1", seq: seq++, entry_date: "2026-10-28", kind: "Payment", customer_id: "cB0002", invoice_no: inv2.no, method: T.DIRECT, amount: inv2.total, reference: "", received_by: "", notes: "", created_at: "2026-10-28T10:00:00Z", paid_to_seller_id: "sS1" });
+  o = E.compute(data);
+  const share25 = o.lotsById.get("l2-5").net;
+  const ours = E.r2(inv2.total - share25); // our fee and the delivery
+  const a1Lots = o.lots.filter(l => l.auctionNo === 1 && l.sold && l.type === "Consignment" && l.seller_id === "sS1");
+  const net1 = E.r2(a1Lots.reduce((t, l) => t + l.net, 0));
+  const pay = on => E.settleCash(a1Lots.map(l => l.settle), on);
+  const sum = m => E.r2([...m.values()].reduce((t, x) => t + x, 0));
+  // paid on 27 Oct, before that buyer paid S001: their full share
+  assert.equal(sum(pay("2026-10-27")), net1);
+  // paid on 29 Oct: S001's own share of 2-05 stays with 2-05; only our fee and the delivery come off
+  assert.equal(sum(pay("2026-10-29")), E.r2(net1 - ours));
+  // record the 27 Oct payout and read the statements: auction 1 settled, auction 2 "you owe us" our fee and delivery
+  const cash = pay("2026-10-27");
+  for (const l of a1Lots) Object.assign(data.lots.find(x => x.id === l.id), { seller_paid_on: "2026-10-27", payout_amount: cash.get(l.id) });
+  o = E.compute(data);
+  const f1 = SA.auctionFigures(o, o.data.auctions.find(a => a.number === 1).id, "sS1");
+  const f2 = SA.auctionFigures(o, o.data.auctions.find(a => a.number === 2).id, "sS1");
+  assert.equal(f1.balance, 0);
+  assert.equal(f2.balance, E.r2(-ours));
+  assert.equal(f2.settledFromElsewhere + f2.usedElsewhere, 0, "nothing carried between the auctions");
+  assert.equal(o.sellersById.get("sS1").owed, E.r2(-ours));
+  // 2-05 itself: their share is already with them; settling it moves nothing but our money back
+  assert.equal(E.settleCash([o.lotsById.get("l2-5").settle]).get("l2-5"), E.r2(-ours));
 });

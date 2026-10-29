@@ -3,6 +3,7 @@ import { loadOffice, pickAuction } from "@/lib/office/load";
 import { AuctionPicker, DemoNote, SetupNeeded } from "@/components/office/bits";
 import { StatementDoc, statementFor } from "@/components/office/SellerDocs";
 import { PrintButton } from "@/components/office/forms";
+import { sellersInAuction } from "@/lib/office/seller-account";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +13,7 @@ export default async function OfficeStatements({ searchParams }: { searchParams:
   if (o instanceof Error) return <SetupNeeded error={o.message} />;
   const a = pickAuction(o, sp.a);
   if (!a) return <p className="empty">No auctions yet.</p>;
-  const ids = [...new Set(o.lots.filter(l => l.auction_id === a.id && l.seller_id).map(l => l.seller_id!))];
+  const ids = sellersInAuction(o, a.id);
   const sellers = ids.map(id => o.data.sellers.find(x => x.id === id)!).filter(Boolean).sort((x, y) => x.code.localeCompare(y.code));
   const one = sp.seller ? sellers.find(x => x.code.toUpperCase() === sp.seller!.toUpperCase()) : undefined;
   const shown = one ? [one] : sellers.filter(x => x.kind !== "own");

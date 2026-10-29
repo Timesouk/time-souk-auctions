@@ -166,7 +166,7 @@ export async function deleteSettlement(id: string) {
  * Settles sold lots with their seller. Each lot remembers the cash that moved: its net, less anything the buyer paid
  * the seller directly (which can leave the seller owing us the difference: a negative amount, money in).
  */
-export async function markSellerPaid(input: { lotIds: string[]; date: string; ref: string; account?: string }) {
+export async function markSellerPaid(input: { lotIds: string[]; date: string; ref: string; account?: string; takeOff?: boolean }) {
   return guard(async () => {
     if (!input.lotIds?.length) return bad("Choose the lots paid.");
     const date = ymd(input.date) || today();
@@ -175,7 +175,8 @@ export async function markSellerPaid(input: { lotIds: string[]; date: string; re
     const o = compute(await loadOfficeData());
     const picked = input.lotIds.slice(0, 500).map(id => o.lotsById.get(id)).filter((l): l is LotView => !!l && l.sold && l.type === "Consignment" && !l.seller_paid_on);
     if (!picked.length) return bad("Those lots are already settled (refresh the page).");
-    const cash = settleCash(picked.map(l => l.settle).filter((x): x is NonNullable<LotView["settle"]> => !!x));
+    // only money buyers had paid the seller by the payout date comes off (and none, when staff say they paid in full)
+    const cash = settleCash(picked.map(l => l.settle).filter((x): x is NonNullable<LotView["settle"]> => !!x), date, input.takeOff !== false);
     const db = adminClient();
     const base = { seller_paid_on: date, payout_ref: str(input.ref, 80), ...(input.account ? { payout_account: str(input.account, 6) } : {}), updated_at: new Date().toISOString() };
     for (const l of picked) {
@@ -232,6 +233,28 @@ export async function setInvoiceDelivery(input: { nos: string[]; step: string; d
     const skipped = step === "With courier" && pickups ? ` Pickup order${pickups === 1 ? "" : "s"} left as ${pickups === 1 ? "it was" : "they were"} (no courier).` : "";
     return ok(`${what} ${stepWords(step, pickups, invs.length - pickups)} (${lots} lot${lots === 1 ? "" : "s"}).${skipped}${warn}`);
   });
+}
+
+/** Undo payouts marked by mistake (or marked with the wrong amount), so they can be marked again. Admins only. */
+export async function undoSellerPaid(lotIds: string[]) {
+  return guard(async () => {
+    const ids = (lotIds || []).slice(0, 500);
+    if (!ids.length) return bad("Nothing to undo.");
+    const db = adminClient();
+    const { data: rows, error } = await db.from("lot_private").select("lot_id, seller_paid_on").in("lot_id", ids);
+    if (error) return bad(error.message);
+    const paid = (rows || []).filter(r => r.seller_paid_on);
+    if (!paid.length) return bad("Those lots aren't marked paid (refresh the page).");
+    const lock = await booksClosedUpTo();
+    const locked = lock ? paid.filter(r => String(r.seller_paid_on) <= lock) : [];
+    if (lock && locked.length) return bad(closedMessage(lock));
+    const { error: e2 } = await db.from("lot_private")
+      .update({ seller_paid_on: null, payout_amount: null, payout_ref: "", payout_account: "", updated_at: new Date().toISOString() })
+      .in("lot_id", paid.map(r => r.lot_id));
+    if (e2) return bad(e2.message);
+    refresh();
+    return ok(`${paid.length} lot${paid.length === 1 ? "" : "s"} back to not paid: mark them again with the right date and amount.`);
+  }, true);
 }
 
 // ───────────────────────────── intake ─────────────────────────────

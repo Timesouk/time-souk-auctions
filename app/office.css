@@ -85,6 +85,16 @@ table.lgrid tr.dirty td.acts { background: #fff6bf; }
 .doc-note { border-inline-start: 4px solid var(--yellow); padding-inline-start: 10px; font-weight: 700; }
 .doc-totals td { padding: 5px 4px; border-bottom: 1px solid #e3e6e1; }
 .doc-totals tr.tot td { font-weight: 900; font-size: 15px; border-top: 2px solid #121417; border-bottom: 0; }
+/* seller statement: the two-column summary (now / once every buyer has paid) and the direct-payment boxes */
+.doc-sum { width: 100%; }
+.doc-sum th { font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; color: #4a4f55; border-bottom: 2px solid #121417; vertical-align: bottom; }
+.doc-sum th small { display: block; text-transform: none; letter-spacing: 0; font-weight: 400; }
+.doc-sum td { padding: 6px 4px; border-bottom: 1px solid #e3e6e1; }
+.doc-sum td.n, .doc-sum th.n { width: 24%; }
+.doc-sum tr.tot td { font-weight: 900; font-size: 15px; border-top: 2px solid #121417; border-bottom: 0; }
+.doc-direct { border: 1.5px solid #e3e6e1; padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; break-inside: avoid; }
+.doc-direct p { margin: 0; line-height: 1.5; }
+.doc-direct .doc-totals { max-width: 520px; }
 .doc-terms { font-size: 11.5px; color: #6b7177; border-top: 1px solid #e3e6e1; padding-top: 10px; margin: 0; }
 
 @media print {
