@@ -133,6 +133,77 @@ export function PayoutForm({ lots, held = 0, accounts = [], defaultAccount = "" 
   );
 }
 
+export type AuctionPayoutSeller = { id: string; code: string; name: string; lots: { id: string; key: string; net: number; waiting: boolean; settle: SettleLot | null }[] };
+
+/**
+ * Every consignor of one auction at once: tick the sellers you've paid (or paid before the back office), choose the date
+ * and the account it was paid from, and mark them all. Each seller's money held from buyers comes off, as on their page.
+ */
+export function AuctionPayoutForm({ sellers, accounts = [], defaultAccount = "" }: { sellers: AuctionPayoutSeller[]; accounts?: { code: string; name: string }[]; defaultAccount?: string }) {
+  const [pick, setPick] = useState<string[]>(sellers.map(x => x.id));
+  const [date, setDate] = useState(today());
+  const [ref, setRef] = useState("");
+  const [account, setAccount] = useState(defaultAccount || accounts[0]?.code || "");
+  const { pending, msg, run } = useAction();
+  const cashOf = (x: AuctionPayoutSeller) => {
+    const c = settleCash(x.lots.map(l => l.settle).filter((v): v is SettleLot => !!v));
+    return Math.round(x.lots.reduce((t, l) => t + (c.get(l.id) ?? l.net), 0) * 100) / 100;
+  };
+  const chosen = sellers.filter(x => pick.includes(x.id));
+  const total = Math.round(chosen.reduce((t, x) => t + cashOf(x), 0) * 100) / 100;
+  const lotIds = chosen.flatMap(x => x.lots.map(l => l.id));
+  const waiting = chosen.reduce((t, x) => t + x.lots.filter(l => l.waiting).length, 0);
+  return (
+    <div className="stack" style={{ gap: 10 }}>
+      <div className="tbl-wrap">
+        <table>
+          <thead><tr><th /><th>Seller</th><th>Lots</th><th className="n">Their share</th><th className="n">To pay now</th><th /></tr></thead>
+          <tbody>
+            {sellers.map(x => {
+              const share = Math.round(x.lots.reduce((t, l) => t + l.net, 0) * 100) / 100;
+              const cash = cashOf(x);
+              const w = x.lots.filter(l => l.waiting).length;
+              return (
+                <tr key={x.id}>
+                  <td><input type="checkbox" checked={pick.includes(x.id)} onChange={e => setPick(e.target.checked ? [...pick, x.id] : pick.filter(v => v !== x.id))} aria-label={`Paid ${x.code}`} /></td>
+                  <td><b>{x.code}</b> <span className="fine">{x.name}</span></td>
+                  <td className="mono">{x.lots.map(l => l.key).join(", ")}</td>
+                  <td className="n">{money(share)}</td>
+                  <td className="n"><b>{cash < 0 ? `they pay us ${money(-cash)}` : money(cash)}</b>{Math.abs(share - cash) > 0.005 ? <small className="sub">{money(share - cash)} held from buyers</small> : null}</td>
+                  <td className="fine">{w ? `${w} buyer${w === 1 ? " hasn't" : "s haven't"} paid (in the system)` : ""}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div className="inline-form">
+        <label className="k">Paid on</label>
+        <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+        <input placeholder="Reference (optional)" value={ref} onChange={e => setRef(e.target.value)} />
+        {accounts.length ? (
+          <select value={account} onChange={e => setAccount(e.target.value)} aria-label="Paid from">
+            {accounts.map(a => <option key={a.code} value={a.code}>Paid from {a.code} · {a.name}</option>)}
+          </select>
+        ) : null}
+        <button
+          type="button"
+          className="btn pri"
+          disabled={pending || !chosen.length}
+          onClick={() => {
+            if (waiting && !window.confirm(`${waiting} of these watches' buyers haven't paid yet (in the system). Mark their sellers paid anyway?\n\nIf those buyers did pay, record their payments on Invoices too.`)) return;
+            run(() => markSellerPaid({ lotIds, date, ref, account: accounts.length ? account : undefined }));
+          }}
+        >
+          {pending ? "Saving…" : `Mark ${chosen.length} seller${chosen.length === 1 ? "" : "s"} paid · AED ${money(total)}`}
+        </button>
+      </div>
+      <p className="fine">The payments are booked in Accounting on that date, from the account chosen (owed to consignors goes down, the bank or cash goes down). Undo one watch by clearing its &ldquo;Seller paid on&rdquo; in Lots › After the sale.</p>
+      <Msg r={msg} />
+    </div>
+  );
+}
+
 /** Settle up outside a lot payout: the seller pays us back what buyers paid them for others, or we pay them on account. */
 export function SettlementForm({ sellerId, owed, accounts = [], defaultAccount = "" }: { sellerId: string; owed: number; accounts?: { code: string; name: string }[]; defaultAccount?: string }) {
   const [v, setV] = useState<SettlementInput>({

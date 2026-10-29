@@ -62,7 +62,7 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
       </div>
       {consign ? (
         <section className="panel-card">
-          <span className="k">Payouts</span>
+          <span className="k">Payouts <Link className="fine" href="/admin/office/sellers/payouts">(every seller of an auction at once)</Link></span>
           <PayoutForm
             lots={owing.map(l => ({ id: l.id, key: l.key, watch: `${l.brand} ${l.model}`.trim(), net: l.net, invoice: l.invoiceNo || "", state: l.payout, settle: l.settle }))}
             held={owing.length ? x.held : 0}

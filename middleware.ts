@@ -3,7 +3,7 @@ import { createServerClient } from "@supabase/ssr";
 
 const LOCALES = ["en", "ar"];
 /** Back office pages that show one auction (see components/office/OfficeNav.tsx). */
-const OFFICE_PER_AUCTION = new Set(["/admin/office", "/admin/office/lots", "/admin/office/invoices", "/admin/office/invoices/print", "/admin/office/statements", "/admin/office/dispatch", "/admin/office/runsheet", "/admin/office/slips"]);
+const OFFICE_PER_AUCTION = new Set(["/admin/office", "/admin/office/lots", "/admin/office/invoices", "/admin/office/invoices/print", "/admin/office/statements", "/admin/office/dispatch", "/admin/office/runsheet", "/admin/office/slips", "/admin/office/sellers/payouts"]);
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

@@ -25,6 +25,7 @@ export default async function OfficeSellers() {
           <p className="fine">Consignors and your own stock (TS). Default fee: {pctText(s.fee_pct / 100)}{s.fee_fixed ? ` + AED ${amt(s.fee_fixed)} per sold lot` : ""}. Due to sellers now (their buyers have paid): {aed(dueNow)} · once every buyer has paid: {aed(owed)}.</p>
         </div>
         <div className="row">
+          <Link className="btn sm pri" href="/admin/office/sellers/payouts">Pay a whole auction</Link>
           <Link className="btn sm" href="/admin/office/intake">Intake</Link>
           <Link className="btn sm" href="/admin/office/statements">Statements</Link>
         </div>
