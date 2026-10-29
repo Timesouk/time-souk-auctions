@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { loadOffice } from "@/lib/office/load";
-import { sellerAccount } from "@/lib/office/seller-account";
+import { sellerAccount, sellerNowAndLater } from "@/lib/office/seller-account";
 import { SetupNeeded } from "@/components/office/bits";
 import { AccountDoc } from "@/components/office/SellerDocs";
 import { PrintButton } from "@/components/office/forms";
@@ -27,7 +27,7 @@ export default async function SellerAccountPage({ params }: { params: Promise<{ 
           <PrintButton />
         </div>
       </div>
-      <AccountDoc seller={seller} acct={acct} s={o.data.settings} asOf={o.today} />
+      <AccountDoc seller={seller} acct={acct} s={o.data.settings} asOf={o.today} now={sellerNowAndLater(o, seller.id).now} />
     </div>
   );
 }

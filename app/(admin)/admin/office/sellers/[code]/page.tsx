@@ -9,6 +9,7 @@ import { ConfirmRun } from "@/components/office/ConfirmRun";
 import { deleteSeller, deleteSettlement } from "../../actions2";
 import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
+import { auctionFigures, sellerNowAndLater } from "@/lib/office/seller-account";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,8 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
   if (!x) return <p className="empty">No seller {code}. <Link href="/admin/office/sellers">All sellers</Link></p>;
   const lots = o.lots.filter(l => l.seller_id === x.id).sort((a, b) => b.auctionNo - a.auctionNo || a.lot_number - b.lot_number);
   const owing = lots.filter(l => l.sold && l.type === "Consignment" && l.payout !== "Paid");
-  const auctions = [...new Set(lots.map(l => l.auction_id))].map(id => o.data.auctions.find(a => a.id === id)!).filter(Boolean).sort((a, b) => b.number - a.number);
+  // auctions with their lots, or where a buyer paid them directly
+  const auctions = o.data.auctions.filter(a => (x.demo || !a.demo) && auctionFigures(o, a.id, x.id)).sort((a, b) => b.number - a.number);
   const intake = o.intake.filter(i => i.seller_id === x.id);
   const receipts = [...new Set(intake.map(i => i.receipt_no))];
   const n = (v: number | null) => (v == null ? "" : String(v));
@@ -31,6 +33,7 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
   const settlements = (o.data.settlements || []).filter(s => s.seller_id === x.id).sort((a, b) => b.entry_date.localeCompare(a.entry_date));
   const directs = o.ledger.filter(e => e.paid_to_seller_id === x.id && e.kind === "Payment").slice().reverse();
   const consign = x.kind !== "own";
+  const nl = sellerNowAndLater(o, x.id);
   return (
     <div className="stack" style={{ gap: 18 }}>
       <div className="adm-head">
@@ -50,12 +53,12 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
         <div><span className="k">Fees</span><b>{amt(x.fees)}</b></div>
         <div><span className="k">Net to seller</span><b>{amt(x.net)}</b></div>
         {x.direct ? <div><span className="k">Buyers paid them directly</span><b>{amt(x.direct)}</b></div> : null}
-        {Math.abs(x.held) > 0.005 ? <div><span className="k">{x.held > 0 ? "They hold for us (not settled)" : "We owe on account"}</span><b>{amt(Math.abs(x.held))}</b></div> : null}
-        {x.owed < -0.005 ? (
-          <div><span className="k">Seller owes us</span><b className="warn-ink">{amt(-x.owed)}</b></div>
-        ) : (
-          <div><span className="k">Still owed</span><b className={x.owed > 0.005 ? "warn-ink" : undefined}>{amt(x.owed)}</b></div>
-        )}
+        {consign ? (
+          <>
+            <div><span className="k">{nl.now < -0.005 ? "They owe us now" : "Due to them now"}</span><b className={Math.abs(nl.now) > 0.005 ? "warn-ink" : undefined}>{amt(Math.abs(nl.now))}</b></div>
+            <div><span className="k">{x.owed < -0.005 ? "They owe us once buyers pay" : "Owed once every buyer pays"}</span><b>{amt(Math.abs(x.owed))}</b></div>
+          </>
+        ) : null}
       </div>
       {consign ? (
         <section className="panel-card">
@@ -78,7 +81,7 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
               <p className="fine">
                 When buyers paid this seller for watches that weren&apos;t theirs (another seller&apos;s, or our own stock), the money is ours: it comes off their next payout above.
                 If there&apos;s no payout to take it from, record here what they paid us back.
-                {x.owed < -0.005 ? <> Right now they owe us <b>AED {amt(-x.owed)}</b>.</> : null}
+                {x.owed < -0.005 ? <> They owe us <b>AED {amt(-x.owed)}</b>.</> : null}
               </p>
               <SettlementForm sellerId={x.id} owed={x.owed < 0 ? x.owed : 0} accounts={payFrom} defaultAccount={o.data.settings.acct_payout_default} />
             </>
