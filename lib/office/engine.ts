@@ -66,18 +66,30 @@ export type LotView = OLot & {
 };
 
 /**
- * A consigned lot not yet settled with its seller, as the payout form needs it.
- * `held`: money the seller already has that's ours to net off (buyers who paid them directly, for any lot, plus anything
- * we paid them on account, less what they paid us back), shared by all their unsettled lots.
+ * A consigned lot not yet settled with its seller, as the payout forms need it.
+ * - `own`: the seller's share of this lot that's already in their hands, because its buyer paid them directly
+ *   (on `ownOn`). It's theirs: it only ever comes off this lot.
+ * - `pool`: money the seller holds that's ours, dated (+ a buyer paid them more than their share: our fee, delivery,
+ *   other watches; we paid them on account; − it was used on a payout, or they paid it back). Shared by all their lots.
  */
-export type SettleLot = { id: string; seller: string; order: number; net: number; held: number; sellerUnpaid: number };
+export type SettleLot = {
+  id: string; seller: string; order: number; net: number; sellerUnpaid: number;
+  own: number; ownOn: string | null;
+  pool: { on: string; amount: number }[];
+};
+
+/** What a seller holds of ours on a date (all of it when no date is given). */
+export const poolAt = (pool: { on: string; amount: number }[], asOf?: string) =>
+  r2(pool.filter(e => !asOf || e.on <= asOf).reduce((t, e) => t + e.amount, 0));
 
 /**
- * The cash that moves for each lot when these lots are settled with their seller. The money they hold comes off the lots
- * in order (lots whose buyer paid them directly first, then lots paid for, then the rest). While other lots stay open, a lot
- * never goes below 0; settling the seller's last open lot takes whatever is left, so it can go negative (they owe us).
+ * The cash that moves for each lot when these lots are settled with their seller, on `asOf` (a payout only uses money the
+ * seller had by then). Each lot first loses what its own buyer already paid the seller; then the money of ours they hold
+ * comes off the lots in order (lots whose buyer paid them directly first, then lots paid for, then the rest). While other
+ * lots stay open, a lot never goes below 0; settling the seller's last open lot takes whatever is left, so it can go
+ * negative (they owe us). `takeOff: false` pays every lot its full share (nothing taken off).
  */
-export function settleCash(picked: SettleLot[]): Map<string, number> {
+export function settleCash(picked: SettleLot[], asOf?: string, takeOff = true): Map<string, number> {
   const out = new Map<string, number>();
   const bySeller = new Map<string, SettleLot[]>();
   for (const l of picked) {
@@ -87,13 +99,19 @@ export function settleCash(picked: SettleLot[]): Map<string, number> {
   }
   for (const ls of bySeller.values()) {
     ls.sort((a, b) => a.order - b.order);
+    if (!takeOff) {
+      for (const l of ls) out.set(l.id, r2(l.net));
+      continue;
+    }
     const finishing = ls.length >= ls[0].sellerUnpaid;
-    let left = ls[0].held;
+    let left = poolAt(ls[0].pool || [], asOf);
     ls.forEach((l, i) => {
+      const own = !asOf || !l.ownOn || l.ownOn <= asOf ? l.own || 0 : 0;
+      const base = r2(l.net - own);
       const last = finishing && i === ls.length - 1;
-      const share = last ? left : Math.min(Math.max(left, 0), l.net);
+      const share = last ? left : Math.min(Math.max(left, 0), Math.max(base, 0));
       left = r2(left - share);
-      out.set(l.id, r2(l.net - share));
+      out.set(l.id, r2(base - share));
     });
   }
   return out;
@@ -452,13 +470,50 @@ export function compute(data: OfficeData): Office {
     const applied = ls.filter(l => l.seller_paid_on).reduce((t, l) => t + (l.net - cashOf(l)), 0);
     return r2((directTo.get(sellerId) || 0) - applied + (settledTo.get(sellerId) || 0));
   };
+  // what each seller was paid directly, per invoice, and when
+  const directPays = new Map<string, Map<string, { amount: number; on: string }>>();
+  for (const e of ledgerBase) {
+    if (e.kind !== "Payment" || e.method !== DIRECT || !e.paid_to_seller_id) continue;
+    const m = directPays.get(e.paid_to_seller_id) || new Map<string, { amount: number; on: string }>();
+    const k = e.invoice_no || `(none)${e.id}`;
+    const x = m.get(k) || { amount: 0, on: e.entry_date };
+    x.amount = r2(x.amount + e.signed);
+    if (e.entry_date > x.on) x.on = e.entry_date;
+    m.set(k, x);
+    directPays.set(e.paid_to_seller_id, m);
+  }
   for (const [k, ls] of sellerLots) {
     const held = heldOf(k, ls);
     heldBy.set(k, held);
+    // Split what the seller was paid directly: their share of their own watches on that invoice (theirs, kept for those
+    // lots) and the rest (ours: our fee, delivery, other watches), as dated pool entries.
+    const own = new Map<string, { amount: number; on: string }>();
+    const pool: { on: string; amount: number }[] = [];
+    for (const [no, x] of directPays.get(k) || []) {
+      let left = x.amount;
+      for (const l of ls.filter(v => v.invoiceNo === no).sort((a, b) => a.lot_number - b.lot_number)) {
+        const c = r2(Math.max(0, Math.min(left, l.net)));
+        left = r2(left - c);
+        if (c > 0) own.set(l.id, { amount: c, on: x.on });
+      }
+      if (Math.abs(left) > 0.005) pool.push({ on: x.on, amount: left });
+    }
+    for (const l of ls.filter(v => v.seller_paid_on)) {
+      // a settled lot used its own buyer's money first; anything more came out of the pool (or, paid in full by us
+      // while its buyer also paid the seller, the buyer's money is now ours)
+      const c = own.get(l.id);
+      const d = r2((c?.amount || 0) - (l.net - cashOf(l)));
+      if (Math.abs(d) > 0.005) pool.push({ on: d > 0 && c && c.on > l.seller_paid_on! ? c.on : l.seller_paid_on!, amount: d });
+    }
+    for (const x of data.settlements || []) if (x.seller_id === k && Math.abs(n0(x.amount)) > 0.005) pool.push({ on: x.entry_date, amount: r2(n0(x.amount)) });
+    pool.sort((a, b) => a.on.localeCompare(b.on));
     const unpaid = ls.filter(l => !l.seller_paid_on);
     const order = (l: LotView) =>
       (directInvoice.has(`${k}|${l.invoiceNo}`) ? 0 : l.payout === "Due to seller" ? 1 : 2) * 1e9 + l.auctionNo * 1e4 + l.lot_number;
-    const settle = unpaid.map((l): SettleLot => ({ id: l.id, seller: k, order: order(l), net: l.net, held, sellerUnpaid: unpaid.length }));
+    const settle = unpaid.map((l): SettleLot => ({
+      id: l.id, seller: k, order: order(l), net: l.net, sellerUnpaid: unpaid.length,
+      own: own.get(l.id)?.amount || 0, ownOn: own.get(l.id)?.on || null, pool
+    }));
     const cash = settleCash(settle);
     unpaid.forEach((l, i) => {
       l.settle = settle[i];

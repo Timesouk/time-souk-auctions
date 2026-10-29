@@ -3,6 +3,11 @@ import { loadAcctData, loadOffice, pickAuction } from "@/lib/office/load";
 import { moneyAccounts } from "@/lib/office/acct-view";
 import { AuctionPicker, DemoNote, SetupNeeded } from "@/components/office/bits";
 import { AuctionPayoutForm, type AuctionPayoutSeller } from "@/components/office/forms2";
+import { ConfirmRun } from "@/components/office/ConfirmRun";
+import { amt } from "@/lib/office/engine";
+import { undoSellerPaid } from "../../actions2";
+import { getStaff } from "@/lib/staff";
+import { IS_PREVIEW } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +32,16 @@ export default async function AuctionPayouts({ searchParams }: { searchParams: P
         lots: lots.map(l => ({ id: l.id, key: l.key, net: l.net, waiting: l.payout === "Wait – buyer not paid", settle: l.settle }))
       };
     });
-  const settledAlready = o.lots.filter(l => l.auction_id === a.id && l.sold && l.type === "Consignment" && l.seller_paid_on).length;
+  const settledLots = o.lots.filter(l => l.auction_id === a.id && l.sold && l.type === "Consignment" && l.seller_paid_on && l.seller_id);
+  const settledAlready = settledLots.length;
+  const settledSellers = [...new Set(settledLots.map(l => l.seller_id!))].map(id => o.sellersById.get(id)!).filter(Boolean).sort((x, y) => x.code.localeCompare(y.code)).map(x => {
+    const ls = settledLots.filter(l => l.seller_id === x.id);
+    const share = ls.reduce((t, l) => t + l.net, 0);
+    const cash = ls.reduce((t, l) => t + (l.payout_amount != null ? Number(l.payout_amount) : l.net), 0);
+    return { x, ls, share: Math.round(share * 100) / 100, cash: Math.round(cash * 100) / 100, dates: [...new Set(ls.map(l => l.seller_paid_on!))].sort() };
+  });
+  const staff = IS_PREVIEW ? null : await getStaff();
+  const admin = IS_PREVIEW || staff?.role === "admin";
   return (
     <div className="stack" style={{ gap: 16 }}>
       <div className="adm-head">
@@ -46,6 +60,7 @@ export default async function AuctionPayouts({ searchParams }: { searchParams: P
       {a.demo ? <DemoNote /> : null}
       {sellers.length ? (
         <section className="panel-card">
+          <span className="k">Still to pay</span>
           <AuctionPayoutForm sellers={sellers} accounts={accounts} defaultAccount={o.data.settings.acct_payout_default} />
         </section>
       ) : (
@@ -53,6 +68,32 @@ export default async function AuctionPayouts({ searchParams }: { searchParams: P
           Nothing left to settle with sellers for auction {a.number}{settledAlready ? ` (${settledAlready} sold watch${settledAlready === 1 ? " is" : "es are"} already settled)` : ""}.
         </p>
       )}
+      {settledSellers.length ? (
+        <section className="panel-card">
+          <span className="k">Already marked paid · auction {a.number}</span>
+          <div className="tbl-wrap">
+            <table>
+              <thead><tr><th>Seller</th><th>Lots</th><th>Paid on</th><th className="n">Their share</th><th className="n">Recorded as paid</th><th /></tr></thead>
+              <tbody>
+                {settledSellers.map(r => (
+                  <tr key={r.x.id}>
+                    <td><Link href={`/admin/office/sellers/${r.x.code}`}><b>{r.x.code}</b></Link> <span className="fine">{r.x.name}</span></td>
+                    <td className="mono">{r.ls.map(l => l.key).join(", ")}</td>
+                    <td className="nowrap">{r.dates.join(", ")}</td>
+                    <td className="n">{amt(r.share)}</td>
+                    <td className="n">
+                      <b>{amt(r.cash)}</b>
+                      {Math.abs(r.share - r.cash) > 0.005 ? <small className="sub warn-ink">{amt(Math.abs(r.share - r.cash))} {r.cash < r.share ? "taken off for money held from buyers" : "more than their share"}</small> : null}
+                    </td>
+                    <td>{admin ? <ConfirmRun label="Undo" ask={`Mark ${r.x.code}'s ${r.ls.length} watch${r.ls.length === 1 ? "" : "es"} in auction ${a.number} as not paid?\n\nUse this when they were marked with the wrong date or amount, then mark them again above.`} run={undoSellerPaid.bind(null, r.ls.map(l => l.id))} /> : null}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="fine">If you paid a seller their full share but less was recorded here (money a buyer paid them later was taken off), press <b>Undo</b>, then mark them again with the date you actually paid them. Admins only.</p>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -9,7 +9,7 @@ import {
 } from "@/app/(admin)/admin/office/actions2";
 import { BOX_PAPERS, CONDITIONS, type MessageOverrides, type OfficeSettings } from "@/lib/office/types";
 import { Wording, cardLinkMessage, type Code } from "@/lib/office/messages";
-import { settleCash, type SettleLot } from "@/lib/office/engine";
+import { poolAt, settleCash, type SettleLot } from "@/lib/office/engine";
 import { WaButton } from "./Wa";
 
 const today = () => new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
@@ -73,25 +73,34 @@ const money = (n: number) => n.toLocaleString("en-US", { maximumFractionDigits: 
  * Tick the lots you've settled with the seller, then mark them paid. Money the seller holds for us (buyers who paid them
  * directly, for any lot) comes off the amount; if it's more than what's owed, the seller pays us the difference.
  */
-export function PayoutForm({ lots, held = 0, accounts = [], defaultAccount = "" }: { lots: PayoutLot[]; held?: number; accounts?: { code: string; name: string }[]; defaultAccount?: string }) {
+export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots: PayoutLot[]; held?: number; accounts?: { code: string; name: string }[]; defaultAccount?: string }) {
   const [pick, setPick] = useState<string[]>(lots.filter(l => l.state === "Due to seller" || l.state === "Seller owes us").map(l => l.id));
   const [date, setDate] = useState(today());
   const [ref, setRef] = useState("");
   const [account, setAccount] = useState(defaultAccount);
+  const [takeOff, setTakeOff] = useState(true);
   const { pending, msg, run } = useAction();
   const chosen = lots.filter(l => pick.includes(l.id));
-  const cash = settleCash(chosen.map(l => l.settle).filter((x): x is SettleLot => !!x));
+  const settles = chosen.map(l => l.settle).filter((x): x is SettleLot => !!x);
+  const cash = settleCash(settles, date, takeOff);
   const total = Math.round(chosen.reduce((t, l) => t + (cash.get(l.id) ?? l.net), 0) * 100) / 100;
-  const netting = Math.abs(held) > 0.005;
+  // what the seller holds of ours on the payout date, and their own buyers' money for the ticked lots
+  const pool = lots[0]?.settle ? poolAt(lots[0].settle.pool, date) : 0;
+  const own = Math.round(settles.reduce((t, x) => t + (!x.ownOn || x.ownOn <= date ? x.own : 0), 0) * 100) / 100;
+  const netting = Math.abs(pool) > 0.005 || own > 0.005 || lots.some(l => (l.settle?.own || 0) > 0.005);
   if (!lots.length) return <p className="fine">No sold lots waiting to be settled with this seller.</p>;
   return (
     <div className="stack" style={{ gap: 10 }}>
       {netting ? (
-        <p className="alert info">
-          {held > 0
-            ? <>This seller holds <b>AED {money(held)}</b> of ours (buyers who paid them directly). It comes off what you pay them below.</>
-            : <>We owe this seller <b>AED {money(-held)}</b> on top of their lots (paid back too much). It&apos;s added below.</>}
-        </p>
+        <div className="alert info">
+          {own > 0.005 ? <p>Buyers already paid this seller <b>AED {money(own)}</b> of the ticked lots&apos; share directly: that part isn&apos;t paid again.</p> : null}
+          {pool > 0.005 ? <p>By {date} they also hold <b>AED {money(pool)}</b> of ours (from buyers who paid them more than their share: our fee, delivery or other watches). It comes off below.</p>
+            : pool < -0.005 ? <p>We owe this seller <b>AED {money(-pool)}</b> on top of their lots (on account). It&apos;s added below.</p> : null}
+          <label className="row" style={{ gap: 6 }}>
+            <input type="checkbox" checked={takeOff} onChange={e => setTakeOff(e.target.checked)} />
+            Take it off this payout (untick if you paid them their full share, e.g. a payment made before a buyer paid them)
+          </label>
+        </div>
       ) : null}
       <div className="tbl-wrap">
         <table>
@@ -120,12 +129,12 @@ export function PayoutForm({ lots, held = 0, accounts = [], defaultAccount = "" 
             {accounts.map(a => <option key={a.code} value={a.code}>{total < 0 ? "Received into" : "Paid from"} {a.code} · {a.name}</option>)}
           </select>
         ) : null}
-        <button type="button" className="btn pri" disabled={pending || !pick.length} onClick={() => run(() => markSellerPaid({ lotIds: pick, date, ref, account: accounts.length ? account : undefined }))}>
+        <button type="button" className="btn pri" disabled={pending || !pick.length} onClick={() => run(() => markSellerPaid({ lotIds: pick, date, ref, account: accounts.length ? account : undefined, takeOff }))}>
           {total < 0 ? `Mark ${pick.length} settled · seller paid us AED ${money(-total)}` : `Mark ${pick.length} paid · AED ${money(total)}`}
         </button>
       </div>
       <p className="fine">
-        Lots marked &ldquo;Wait&rdquo; haven&apos;t been paid for by the buyer yet.
+        Lots marked &ldquo;Wait&rdquo; haven&apos;t been paid for by the buyer yet. Only money buyers paid the seller by the &ldquo;Paid on&rdquo; date is taken off.
         {netting ? " Ticking only some lots: each stays at 0 or more, and what's left of the money they hold comes off the next payout." : ""}
       </p>
       <Msg r={msg} />
@@ -144,9 +153,10 @@ export function AuctionPayoutForm({ sellers, accounts = [], defaultAccount = "" 
   const [date, setDate] = useState(today());
   const [ref, setRef] = useState("");
   const [account, setAccount] = useState(defaultAccount || accounts[0]?.code || "");
+  const [takeOff, setTakeOff] = useState(true);
   const { pending, msg, run } = useAction();
   const cashOf = (x: AuctionPayoutSeller) => {
-    const c = settleCash(x.lots.map(l => l.settle).filter((v): v is SettleLot => !!v));
+    const c = settleCash(x.lots.map(l => l.settle).filter((v): v is SettleLot => !!v), date, takeOff);
     return Math.round(x.lots.reduce((t, l) => t + (c.get(l.id) ?? l.net), 0) * 100) / 100;
   };
   const chosen = sellers.filter(x => pick.includes(x.id));
@@ -169,7 +179,7 @@ export function AuctionPayoutForm({ sellers, accounts = [], defaultAccount = "" 
                   <td><b>{x.code}</b> <span className="fine">{x.name}</span></td>
                   <td className="mono">{x.lots.map(l => l.key).join(", ")}</td>
                   <td className="n">{money(share)}</td>
-                  <td className="n"><b>{cash < 0 ? `they pay us ${money(-cash)}` : money(cash)}</b>{Math.abs(share - cash) > 0.005 ? <small className="sub">{money(share - cash)} held from buyers</small> : null}</td>
+                  <td className="n"><b>{cash < 0 ? `they pay us ${money(-cash)}` : money(cash)}</b>{Math.abs(share - cash) > 0.005 ? <small className="sub">{money(share - cash)} already paid to them by buyers</small> : null}</td>
                   <td className="fine">{w ? `${w} buyer${w === 1 ? " hasn't" : "s haven't"} paid (in the system)` : ""}</td>
                 </tr>
               );
@@ -177,6 +187,10 @@ export function AuctionPayoutForm({ sellers, accounts = [], defaultAccount = "" 
           </tbody>
         </table>
       </div>
+      <label className="row" style={{ gap: 6 }}>
+        <input type="checkbox" checked={takeOff} onChange={e => setTakeOff(e.target.checked)} />
+        <span>Take off money buyers paid the sellers directly by the &ldquo;Paid on&rdquo; date. Untick if you paid each seller their full share (for example, paid before any buyer paid them).</span>
+      </label>
       <div className="inline-form">
         <label className="k">Paid on</label>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} />
@@ -192,13 +206,13 @@ export function AuctionPayoutForm({ sellers, accounts = [], defaultAccount = "" 
           disabled={pending || !chosen.length}
           onClick={() => {
             if (waiting && !window.confirm(`${waiting} of these watches' buyers haven't paid yet (in the system). Mark their sellers paid anyway?\n\nIf those buyers did pay, record their payments on Invoices too.`)) return;
-            run(() => markSellerPaid({ lotIds, date, ref, account: accounts.length ? account : undefined }));
+            run(() => markSellerPaid({ lotIds, date, ref, account: accounts.length ? account : undefined, takeOff }));
           }}
         >
           {pending ? "Saving…" : `Mark ${chosen.length} seller${chosen.length === 1 ? "" : "s"} paid · AED ${money(total)}`}
         </button>
       </div>
-      <p className="fine">The payments are booked in Accounting on that date, from the account chosen (owed to consignors goes down, the bank or cash goes down). Undo one watch by clearing its &ldquo;Seller paid on&rdquo; in Lots › After the sale.</p>
+      <p className="fine">The payments are booked in Accounting on that date, from the account chosen (owed to consignors goes down, the bank or cash goes down). Marked with the wrong date or amount? Use <b>Undo</b> under &ldquo;Already marked paid&rdquo; and mark them again.</p>
       <Msg r={msg} />
     </div>
   );
