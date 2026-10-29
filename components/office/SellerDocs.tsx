@@ -1,6 +1,6 @@
 // Seller paperwork, printed with both logos: the consignment intake receipt and the listing / statement per auction.
 import { amt, type IntakeView, type LotView, type Office } from "@/lib/office/engine";
-import { auctionFigures, oursText, type AuctionFigures, type SellerAccount } from "@/lib/office/seller-account";
+import { auctionFigures, oursText, sellerAuctions, type AuctionFigures, type SellerAccount } from "@/lib/office/seller-account";
 import { dateText, pctText } from "@/lib/office/messages";
 import type { OAuction, OfficeSettings, Seller } from "@/lib/office/types";
 import { DocHead } from "./DocHead";
@@ -88,6 +88,8 @@ export type Statement = {
   fig: AuctionFigures;
   /** The seller's account across every auction: we owe them (+) or they owe us (−). */
   account: { owed: number; held: number };
+  /** Every auction with something for this seller, now and once every buyer has paid, plus payments on account. */
+  all: { rows: { auction: OAuction; now: number; later: number; current: boolean }[]; onAccount: number; now: number; later: number };
   asOf: string;
 };
 
@@ -99,9 +101,15 @@ export function statementFor(o: Office, auctionId: string, sellerId: string): St
   if (!auction || !seller || !fig) return null;
   const decided = !fig.lots.length || fig.lots.some(l => l.sold || l.status === "Unsold" || l.exception);
   const sv = o.sellersById.get(sellerId);
+  const sa = sellerAuctions(o, sellerId);
+  const rows = [...sa.byAuction.entries()]
+    .map(([id, f]) => ({ auction: o.data.auctions.find(a => a.id === id)!, now: f.balanceNow, later: f.balance, current: id === auctionId }))
+    .filter(r => r.auction && (r.current || Math.abs(r.now) > 0.005 || Math.abs(r.later) > 0.005))
+    .sort((a, b) => a.auction.number - b.auction.number);
   return {
     auction, seller, lots: fig.lots, listing: !decided && auction.sale_date >= o.today, fig,
-    account: { owed: sv?.owed || 0, held: sv?.held || 0 }, asOf: o.today
+    account: { owed: sv?.owed || 0, held: sv?.held || 0 }, asOf: o.today,
+    all: { rows, onAccount: sa.onAccount, now: sa.now, later: sa.later }
   };
 }
 
@@ -118,7 +126,7 @@ function owing(n: number) {
 }
 
 export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
-  const { auction, seller, lots, listing, account, fig, asOf } = st;
+  const { auction, seller, lots, listing, fig, asOf } = st;
   const own = seller.kind === "own";
   const sold = fig.sold;
   const rowOf = new Map(fig.rows.map(r => [r.lot.id, r]));
@@ -244,8 +252,10 @@ export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
             <thead><tr><th /><th className="n">Now<small>buyers who have paid</small></th><th className="n">Once every buyer<small>has paid</small></th></tr></thead>
             <tbody>
               <tr><td>Your share of watches sold (after our fee)</td><td className="n">{amt(fig.netReady)}</td><td className="n">{amt(fig.net)}</td></tr>
-              {fig.direct ? <tr><td>Less: paid to you directly by buyers</td><td className="n">{lessAmt(fig.directReady)}</td><td className="n">{lessAmt(fig.direct)}</td></tr> : null}
+              {fig.direct ? <tr><td>Less: paid to you directly by this auction&apos;s buyers</td><td className="n">{lessAmt(fig.directNow)}</td><td className="n">{lessAmt(fig.direct)}</td></tr> : null}
+              {fig.usedElsewhere ? <tr><td>Plus: part of that already used to settle your other watches (see below)</td><td className="n">+{amt(fig.usedElsewhere)}</td><td className="n">+{amt(fig.usedElsewhere)}</td></tr> : null}
               <tr><td>{fig.paidByUs < -0.005 ? "Plus: what you paid us when we settled" : "Less: paid to you by us"}</td><td className="n">{lessAmt(fig.paidByUs)}</td><td className="n">{lessAmt(fig.paidByUs)}</td></tr>
+              {fig.settledFromElsewhere ? <tr><td>Less: settled from money you held from other auctions&apos; buyers (see below)</td><td className="n">−{amt(fig.settledFromElsewhere)}</td><td className="n">−{amt(fig.settledFromElsewhere)}</td></tr> : null}
               <tr className="tot">
                 <td>Balance</td>
                 <td className="n">{balCell(fig.balanceNow)}</td>
@@ -263,12 +273,38 @@ export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
             ) : <p>Every buyer has paid.</p>}
             {fig.waitingRows.length || Math.abs(fig.balance - fig.balanceNow) > 0.005 ? <p><b>Once every buyer has paid:</b> {owing(fig.balance)}.</p> : null}
             {lots.length ? <p>{sold.length} of {lots.length} sold{lots.length > sold.length ? `; unsold watches stay yours (collect them or relist).` : "."}</p> : <p>You had no watches in this auction; a buyer from it paid you directly.</p>}
-            {Math.abs(account.owed - fig.balance) > 0.005 ? (
-              <p className="fine">
-                Across all your auctions with us, {owing(account.owed)} once every buyer has paid (this includes other auctions and anything settled separately; ask for your account statement for every line).
+            {fig.setoffsIn.map((x, i) => (
+              <p key={`in${i}`}>
+                <b>Lot {x.toLot}</b> was settled on {dateText(x.date, "EN").slice(4)} with AED {amt(x.amount)} from {x.fromAuctionId ? `money buyers in ${x.fromLabel} paid you directly, beyond your share there` : x.fromLabel}, so we didn&apos;t pay that part again.
               </p>
-            ) : null}
+            ))}
+            {fig.setoffsOut.map((x, i) => (
+              <p key={`out${i}`}>
+                AED {amt(x.amount)} of the money this auction&apos;s buyers paid you {x.toAuctionId ? <>settled <b>{x.toLabel}</b> on {dateText(x.date, "EN").slice(4)}</> : <>is covered by {x.toLabel}</>}, so it isn&apos;t owed here any more.
+              </p>
+            ))}
           </div>
+          {st.all.rows.length > 1 || Math.abs(st.all.onAccount) > 0.005 ? (
+            <>
+              <span className="k">All your auctions with us</span>
+              <table className="doc-sum">
+                <thead><tr><th /><th className="n">Now<small>buyers who have paid</small></th><th className="n">Once every buyer<small>has paid</small></th></tr></thead>
+                <tbody>
+                  {st.all.rows.map(r => (
+                    <tr key={r.auction.id}>
+                      <td>Auction {r.auction.number} · {dateText(r.auction.sale_date, "EN").slice(4)}{r.current ? " (this statement)" : ""}</td>
+                      <td className="n">{balCell(r.now)}</td>
+                      <td className="n">{balCell(r.later)}</td>
+                    </tr>
+                  ))}
+                  {Math.abs(st.all.onAccount) > 0.005 ? (
+                    <tr><td>Payments between us on account</td><td className="n">{balCell(st.all.onAccount)}</td><td className="n">{balCell(st.all.onAccount)}</td></tr>
+                  ) : null}
+                  <tr className="tot"><td>Your account in total</td><td className="n">{balCell(st.all.now)}</td><td className="n">{balCell(st.all.later)}</td></tr>
+                </tbody>
+              </table>
+            </>
+          ) : null}
         </section>
       ) : null}
 
