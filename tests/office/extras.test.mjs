@@ -210,3 +210,22 @@ test("demo buyer codes run D0001, D0002 … and real ones B…", () => {
   assert.equal(E.nextCustomerCode(list), "B0013");
   assert.equal(E.nextCustomerCode(list, "D"), "D0003");
 });
+
+test("print all invoices: the same filters as the Invoices page, in invoice-number order", () => {
+  const F = require(out + "invoice-filter.js");
+  const o = E.compute(sampleOffice(NOW));
+  const a1 = o.invoices.filter(i => i.auctionNo === 1);
+  assert.ok(a1.length > 1);
+  const sorted = [...a1].sort(F.byInvoiceNo).map(i => i.no);
+  assert.deepEqual(sorted, [...sorted].sort((x, y) => x.localeCompare(y, "en", { numeric: true })));
+  assert.equal(F.invoiceShow("unpaid"), "unpaid");
+  assert.equal(F.invoiceShow("nonsense"), "");
+  assert.equal(F.invoiceShow(undefined), "");
+  for (const i of a1) {
+    assert.equal(F.showInvoice("", i), true);
+    assert.equal(F.showInvoice("unpaid", i), i.balance > 0 && i.paysBy !== T.COD);
+    assert.equal(F.showInvoice("refund", i), i.balance < -0.005);
+  }
+  // every invoice is in exactly the "All" list; the filtered lists are parts of it
+  for (const [k] of F.INVOICE_SHOWS) assert.ok(a1.filter(i => F.showInvoice(k, i)).length <= a1.length);
+});

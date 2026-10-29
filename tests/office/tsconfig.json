@@ -27,6 +27,7 @@
     "../../lib/office/chart.ts",
     "../../lib/office/types.ts",
     "../../lib/office/demo.ts",
-    "../../lib/office/seller-account.ts"
+    "../../lib/office/seller-account.ts",
+    "../../lib/office/invoice-filter.ts"
   ]
 }

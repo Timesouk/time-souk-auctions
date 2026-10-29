@@ -4,32 +4,11 @@ import { aed, amt, type InvoiceView } from "@/lib/office/engine";
 import { dateText } from "@/lib/office/messages";
 import { hoursSince, invoiceMessages } from "@/lib/office/view";
 import { COD } from "@/lib/office/types";
+import { INVOICE_SHOWS as SHOWS, invoiceShow, showInvoice as pick } from "@/lib/office/invoice-filter";
 import { AuctionPicker, DemoNote, LotKeys, Pill, SetupNeeded } from "@/components/office/bits";
 import { WaButton } from "@/components/office/Wa";
 
 export const dynamic = "force-dynamic";
-
-const SHOWS: [string, string][] = [
-  ["", "All"],
-  ["unpaid", "Unpaid"],
-  ["overdue", "Overdue"],
-  ["unsent", "Not sent"],
-  ["fee", "Need delivery fee"],
-  ["ready", "Ready to ship"],
-  ["refund", "Refund due"]
-];
-
-const pick = (show: string, i: InvoiceView) => {
-  switch (show) {
-    case "unpaid": return i.balance > 0 && i.paysBy !== COD;
-    case "overdue": return (i.hoursOverdue || 0) > 0;
-    case "unsent": return !i.sentAt;
-    case "fee": return i.feeMissing;
-    case "ready": return /^Ready/.test(i.nextStep);
-    case "refund": return i.balance < -0.005;
-    default: return true;
-  }
-};
 
 export default async function OfficeInvoices({ searchParams }: { searchParams: Promise<{ a?: string; show?: string; all?: string }> }) {
   const sp = await searchParams;
@@ -37,7 +16,7 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
   if (o instanceof Error) return <SetupNeeded error={o.message} />;
   const all = sp.all === "1";
   const a = all ? null : pickAuction(o, sp.a);
-  const show = SHOWS.some(([k]) => k === sp.show) ? sp.show || "" : "";
+  const show = invoiceShow(sp.show);
   const s = o.data.settings;
   // "every auction" leaves out the demo (training) auction
   const base = all ? o.invoices.filter(i => !i.demo) : o.invoices.filter(i => i.auction?.id === a?.id);
@@ -55,6 +34,11 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
         </div>
         <div className="row">
           {!all ? <AuctionPicker auctions={o.data.auctions} current={a} action="/admin/office/invoices" extra={show ? { show } : {}} /> : null}
+          {!all && a && list.length ? (
+            <Link className="btn sm" href={`/admin/office/invoices/print?a=${a.number}${show ? `&show=${show}` : ""}`}>
+              {show ? `Print these ${list.length}` : `Print all ${list.length}`}
+            </Link>
+          ) : null}
           <Link className="btn sm" href={all ? `/admin/office/invoices${show ? `?show=${show}` : ""}` : href(show, true)}>{all ? "One auction" : "Every auction"}</Link>
         </div>
       </div>
