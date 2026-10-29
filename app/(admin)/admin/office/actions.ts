@@ -101,6 +101,29 @@ export async function saveCustomer(input: CustomerInput) {
   });
 }
 
+/**
+ * Deletes a buyer added by mistake (admin only). Refused while they have won lots or have payments, deposits or refunds:
+ * those keep the buyer on record. Their website account, if any, isn't touched.
+ */
+export async function deleteCustomer(id: string) {
+  return guard(async () => {
+    const db = adminClient();
+    const { data: c, error } = await db.from("customers").select("id, code, instagram, full_name, profile_id").eq("id", id).maybeSingle();
+    if (error) return bad(error.message);
+    if (!c) return bad("That buyer isn't there any more.");
+    const who = `${c.code}${c.instagram ? ` (@${c.instagram})` : ""}`;
+    const { data: won } = await db.from("lot_private").select("lot_id").eq("winner_customer_id", id);
+    if (won?.length) return bad(`${who} has won ${won.length} lot${won.length === 1 ? "" : "s"}. Clear them as the winner on Lots first (or keep the buyer).`);
+    const { data: money } = await db.from("ledger").select("id").eq("customer_id", id);
+    if (money?.length) return bad(`${who} has ${money.length} payment${money.length === 1 ? "" : "s"}, deposit${money.length === 1 ? "" : "s"} or refund${money.length === 1 ? "" : "s"} recorded. Remove them on Payments first (or keep the buyer).`);
+    await db.from("invoice_adjustments").delete().like("invoice_no", `%-${c.code}`);
+    const { error: e2 } = await db.from("customers").delete().eq("id", id);
+    if (e2) return bad(e2.message);
+    refresh();
+    return ok(`Buyer ${who} deleted.${c.profile_id ? " Their website account is still there (Admin › Bidders)." : ""}`);
+  }, true);
+}
+
 // ───────────────────────────── lots ─────────────────────────────
 
 export type LotChange = { id: string; fields: Record<string, string> };
@@ -509,20 +532,24 @@ export async function recordEntry(input: EntryInput) {
     const lock = await booksClosedUpTo();
     const when = ymd(input.entry_date) || new Date(Date.now() + 4 * 3600e3).toISOString().slice(0, 10);
     if (lock && when <= lock) return bad(closedMessage(lock));
-    // The buyer paid the consignor directly: it must be a payment on an invoice with that seller's lots, not yet settled with them.
+    // The buyer paid a consignor directly: any consignor, even for another seller's lot or our own stock.
+    // It counts as paid on the invoice; the consignor holds that money for us and it comes off their next payout.
     const direct = method === DIRECT;
     const sellerId = str(input.paid_to_seller_id, 40);
     let sellerCode = "";
+    let theirOwn = false;
     if (direct) {
       if (input.kind !== "Payment") return bad("“Paid to seller directly” is only for payments on an invoice.");
       if (!sellerId) return bad("Choose the seller the buyer paid.");
       const o = compute(await loadOfficeData());
       const invoice = o.invoicesByNo.get(inv);
       if (!invoice) return bad(`There's no open invoice ${inv}.`);
-      const theirs = invoice.lots.filter(l => l.seller_id === sellerId && l.type === "Consignment");
-      if (!theirs.length) return bad("That seller has no consigned lots on this invoice.");
-      if (theirs.every(l => l.seller_paid_on)) return bad("This seller's lots on the invoice are already settled. Record the buyer's payment to them before settling the seller.");
-      sellerCode = theirs[0].seller?.code || "";
+      const seller = o.data.sellers.find(x => x.id === sellerId);
+      if (!seller) return bad("That seller isn't on Sellers any more.");
+      if (seller.kind === "own") return bad("That's our own stock: the money came to us, so record it with the method it was paid by.");
+      if (!!seller.demo !== !!invoice.demo) return bad(invoice.demo ? "In the demo auction, choose a demo seller." : "Demo sellers are only for the demo auction.");
+      sellerCode = seller.code;
+      theirOwn = invoice.lots.some(l => l.seller_id === sellerId && l.type === "Consignment");
     }
     const db = adminClient();
     const { data, error } = await db
@@ -539,7 +566,7 @@ export async function recordEntry(input: EntryInput) {
     const what = input.kind === "Deposit" ? "Deposit" : input.kind === "Refund" ? "Refund" : "Payment";
     return ok(
       direct
-        ? `Payment of AED ${amt.toLocaleString("en-US")} the buyer made to seller ${sellerCode} recorded. It comes off what we owe ${sellerCode} when you settle with them.`
+        ? `Payment of AED ${amt.toLocaleString("en-US")} the buyer made to seller ${sellerCode} recorded. ${theirOwn ? "" : `It wasn't for ${sellerCode}'s own watch, so ${sellerCode} holds it for us. `}It comes off ${sellerCode}'s next payout, or they pay it back (Sellers › ${sellerCode} › Settle up).`
         : `${what} of AED ${amt.toLocaleString("en-US")} recorded.`,
       data.id
     );

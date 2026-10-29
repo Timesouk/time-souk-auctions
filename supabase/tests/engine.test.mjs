@@ -759,3 +759,26 @@ test("a test auction's cancelled website invoices (and their payment attempts) c
   const left = await one("select (select count(*)::int from lots where id = $1) l, (select count(*)::int from payments p join invoices i on i.id = p.invoice_id where i.auction_id = $2) p", [lot, a]);
   assert.deepEqual([left.l, left.p], [0, 0]);
 });
+
+test("0009: seller settlements can be run again, staff read them, nobody writes them from the browser", async () => {
+  const sql = readFileSync(new URL("0009_seller_settlements.sql", migrationsDir), "utf8").replace(/^notify pgrst.*$/m, "");
+  await db.exec(sql);
+  await db.exec(sql);
+  const s = (await one("insert into sellers (code, name) values ('S960', 'Settle test') returning id")).id;
+  await db.query("insert into seller_settlements (seller_id, amount, account_code) values ($1, -1000, '1020')", [s]);
+  await expectError(db.query("insert into seller_settlements (seller_id, amount) values ($1, 0)", [s]), "new row for relation \"seller_settlements\" violates check constraint");
+  await expectError(db.query("delete from sellers where id = $1", [s]), "update or delete on table \"sellers\" violates");
+  for (const [uid, sees] of [[A.id, 0], [S.id, 1]]) {
+    await db.query("select set_config('test.uid', $1, false)", [uid]);
+    await db.exec("set role authenticated");
+    try {
+      assert.equal((await all("select id from seller_settlements where seller_id = $1", [s])).length, sees);
+      await expectError(db.query("insert into seller_settlements (seller_id, amount) values ($1, 5)", [s]), "permission denied");
+    } finally {
+      await db.exec("reset role");
+      await db.query("select set_config('test.uid', '', false)");
+    }
+  }
+  await db.query("delete from seller_settlements where seller_id = $1", [s]);
+  await db.query("delete from sellers where id = $1", [s]);
+});

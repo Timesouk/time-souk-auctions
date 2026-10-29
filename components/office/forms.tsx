@@ -30,7 +30,7 @@ function confirmText(c: NonNullable<Confirm>, kind: EntryInput["kind"], amount: 
 }
 
 export function EntryForm({
-  kind, buyers, customerId, invoiceNo, amount, method, lockBuyer, confirm, title, methods, sellers
+  kind, buyers, customerId, invoiceNo, amount, method, lockBuyer, confirm, title, methods, sellers, defaultSeller
 }: {
   kind: EntryInput["kind"];
   buyers?: BuyerOption[];
@@ -44,12 +44,14 @@ export function EntryForm({
   methods?: readonly string[];
   /** Consignors the buyer might have paid directly (payments only): adds "Paid to seller directly". */
   sellers?: { id: string; label: string }[];
+  /** The consignor to pick first (the one on the invoice). */
+  defaultSeller?: string;
 }) {
   const direct = kind === "Payment" && !!sellers?.length;
   const list = [...(methods || PAY_METHODS), ...(direct ? [DIRECT] : [])];
   const init = (): EntryInput => ({
     kind, customer_id: customerId || "", invoice_no: invoiceNo || "", method: method || "Bank transfer", amount: amount && amount > 0 ? String(amount) : "",
-    entry_date: today(), reference: "", received_by: "", notes: "", paid_to_seller_id: sellers?.length === 1 ? sellers[0].id : ""
+    entry_date: today(), reference: "", received_by: "", notes: "", paid_to_seller_id: defaultSeller || (sellers?.length === 1 ? sellers[0].id : "")
   });
   const [v, setV] = useState<EntryInput>(init);
   const [done, setDone] = useState<{ amount: number; method: string } | null>(null);
@@ -101,8 +103,9 @@ export function EntryForm({
       {kind === "Payment" && /card/i.test(v.method) ? <p className="fine">Card link payments: type the full amount received. The card fee inside it is split out automatically.</p> : null}
       {v.method === DIRECT ? (
         <p className="fine">
-          The buyer paid the consignor straight to their account. It counts as paid on this invoice, and comes off what we owe the seller when you settle with them on their page.
-          If it&apos;s more than the seller&apos;s net, they owe us the difference (our fee).
+          The buyer paid a consignor straight to their account: the seller of this watch, or any other seller they know (even for our own stock).
+          It counts as paid on this invoice. The seller holds that money for us, so it comes off their next payout; if they have no payout coming,
+          they pay it back (their page › Settle up).
         </p>
       ) : null}
       <div className="row">

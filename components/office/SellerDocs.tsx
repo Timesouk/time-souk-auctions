@@ -1,6 +1,7 @@
 // Seller paperwork, printed with both logos: the consignment intake receipt and the listing / statement per auction.
 import { amt, pad3, type IntakeView, type LotView, type Office } from "@/lib/office/engine";
 import { DIRECT } from "@/lib/office/types";
+import type { SellerAccount } from "@/lib/office/seller-account";
 import { dateText, pctText } from "@/lib/office/messages";
 import type { OAuction, OfficeSettings, Seller } from "@/lib/office/types";
 import { DocHead } from "./DocHead";
@@ -86,6 +87,8 @@ export type Statement = {
   auction: OAuction; seller: Seller; lots: LotView[]; listing: boolean;
   /** What this auction's buyers paid the seller directly. */
   direct: number;
+  /** The seller's account across every auction: we owe them (+) or they owe us (−), and money they hold for us. */
+  account: { owed: number; held: number };
 };
 
 /** One seller's lots in one auction. Before the results are in it's a listing; after, a statement of what's owed. */
@@ -100,17 +103,19 @@ export function statementFor(o: Office, auctionId: string, sellerId: string): St
   const direct = o.ledger
     .filter(e => e.kind === "Payment" && e.method === DIRECT && e.paid_to_seller_id === sellerId && e.invoice_no.toUpperCase().startsWith(prefix))
     .reduce((t, e) => t + e.amount, 0);
-  return { auction, seller, lots, listing: !decided && auction.sale_date >= o.today, direct: Math.round(direct * 100) / 100 };
+  const sv = o.sellersById.get(sellerId);
+  return { auction, seller, lots, listing: !decided && auction.sale_date >= o.today, direct: Math.round(direct * 100) / 100, account: { owed: sv?.owed || 0, held: sv?.held || 0 } };
 }
 
 export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
-  const { auction, seller, lots, listing, direct } = st;
+  const { auction, seller, lots, listing, account } = st;
   const sold = lots.filter(l => l.sold);
   const sum = (f: (l: LotView) => number) => sold.reduce((t, l) => t + f(l), 0);
   const net = sum(l => l.net);
-  // the cash that moved when lots were settled (+ we paid, − the seller paid us)
-  const paid = sold.filter(l => l.payout === "Paid").reduce((t, l) => t + (l.payout_amount != null ? Number(l.payout_amount) : l.net), 0);
-  const left = Math.round((net - direct - paid) * 100) / 100;
+  // this auction: lots settled with the seller (whatever cash moved, since money they held from buyers is netted at account level)
+  const settled = sold.filter(l => l.payout === "Paid").reduce((t, l) => t + l.net, 0);
+  const left = Math.round((net - settled) * 100) / 100;
+  const r = (n: number) => Math.round(n * 100) / 100;
   const own = seller.kind === "own";
   return (
     <article className="doc doc-page">
@@ -165,9 +170,17 @@ export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
         <div className="doc-foot">
           <div className="doc-pay">
             <p>{sold.length} of {lots.length} sold.</p>
-            {left > 0.005 ? <p><b>We&apos;ll pay AED {amt(left)}</b> once each buyer has paid.</p>
-              : left < -0.005 ? <p><b>Please pay us AED {amt(-left)}</b>: buyers paid you directly more than your net (our fee is in it).</p>
-                : <p><b>Settled in full.</b></p>}
+            {left > 0.005 ? <p><b>AED {amt(left)} still to settle</b> for this auction, once each buyer has paid.</p> : <p><b>This auction is settled.</b></p>}
+            {Math.abs(account.held) > 0.005 ? (
+              <p>
+                {account.held > 0
+                  ? <>Buyers paid you <b>AED {amt(account.held)}</b> directly that hasn&apos;t been settled yet (for your watches or others&apos;): it comes off what we pay you.</>
+                  : <>We also owe you <b>AED {amt(-account.held)}</b> on your account.</>}
+              </p>
+            ) : null}
+            <p>
+              <b>Your account, all auctions: {account.owed >= 0 ? `we owe you AED ${amt(account.owed)}` : `you owe us AED ${amt(-account.owed)}`}.</b>
+            </p>
           </div>
           <table className="doc-totals">
             <tbody>
@@ -175,15 +188,66 @@ export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
               <tr><td>Seller fees</td><td className="n">−{amt(sum(l => l.fee))}</td></tr>
               {s.vat_fee_pct ? <tr><td>VAT on fees</td><td className="n">−{amt(sum(l => l.vatFee))}</td></tr> : null}
               <tr className="tot"><td>Net to you</td><td className="n">{amt(net)}</td></tr>
-              {direct ? <tr><td>Paid to you directly by buyers</td><td className="n">−{amt(direct)}</td></tr> : null}
-              <tr><td>{paid < 0 ? "You paid us" : "Paid so far"}</td><td className="n">{paid > 0 ? `−${amt(paid)}` : paid < 0 ? `+${amt(-paid)}` : "0"}</td></tr>
-              <tr className="tot"><td>{left < -0.005 ? "You owe us" : "Still to pay you"}</td><td className="n">{amt(Math.abs(left))}</td></tr>
+              <tr><td>Settled already</td><td className="n">{settled ? `−${amt(r(settled))}` : "0"}</td></tr>
+              <tr className="tot"><td>Still to settle</td><td className="n">{amt(left)}</td></tr>
             </tbody>
           </table>
         </div>
       ) : null}
       {s.seller_terms ? <p className="doc-terms">{s.seller_terms}</p> : null}
       {listing ? <Signatures left="Seller's signature" right={`For ${s.trading_name || "The Time Souk"}`} /> : null}
+    </article>
+  );
+}
+
+/** The seller's whole account with us, every auction, line by line with a running balance. */
+export function AccountDoc({ seller, acct, s, asOf }: { seller: Seller; acct: SellerAccount; s: OfficeSettings; asOf: string }) {
+  const sign = (n: number) => (n > 0.005 ? `+${amt(n)}` : n < -0.005 ? `−${amt(-n)}` : "0");
+  const bal = (n: number) => (n < -0.005 ? `${amt(-n)} you owe` : amt(n));
+  return (
+    <article className="doc doc-page">
+      <DocHead s={s} />
+      <div className="doc-title">
+        <h2>SELLER ACCOUNT STATEMENT</h2>
+        <dl>
+          <dt>Seller ID</dt><dd className="mono">{seller.code}</dd>
+          <dt>As of</dt><dd>{dateText(asOf, "EN")}</dd>
+        </dl>
+      </div>
+      <section className="doc-bill">
+        <span className="k">Seller</span>
+        <strong>{seller.name}</strong>
+        <span>{[seller.phone, seller.email].filter(Boolean).join("  ·  ")}</span>
+        {seller.iban ? <span>Payout to: {seller.bank ? `${seller.bank} · ` : ""}<span className="mono">{seller.iban}</span></span> : null}
+      </section>
+      <table className="doc-lots">
+        <thead><tr><th>Date</th><th>Details</th><th className="n">AED</th><th className="n">Balance</th></tr></thead>
+        <tbody>
+          {acct.lines.map((l, i) => (
+            <tr key={i}>
+              <td className="nowrap">{l.date}</td>
+              <td>{l.what}{l.note ? <small className="sub">{l.note}</small> : null}</td>
+              <td className="n nowrap">{sign(l.amount)}</td>
+              <td className="n nowrap">{bal(l.balance)}</td>
+            </tr>
+          ))}
+          {!acct.lines.length ? <tr><td colSpan={4} className="fine">Nothing on this account yet.</td></tr> : null}
+        </tbody>
+      </table>
+      <div className="doc-foot">
+        <div className="doc-pay">
+          {acct.balance > 0.005 ? <p><b>We owe you AED {amt(acct.balance)}.</b>{acct.waiting > 0.005 ? ` AED ${amt(Math.min(acct.waiting, acct.balance))} of it is for watches whose buyer hasn't paid yet: we pay it once they do.` : ""}</p>
+            : acct.balance < -0.005 ? <p><b>Please pay us AED {amt(-acct.balance)}.</b> Buyers paid you more than your sold watches came to (for example, for watches that weren&apos;t yours).</p>
+              : <p><b>Your account is settled.</b></p>}
+          <p className="fine">+ adds to what we owe you; − is money you&apos;ve had (from us, or straight from buyers).</p>
+        </div>
+        <table className="doc-totals">
+          <tbody>
+            <tr className="tot"><td>{acct.balance < -0.005 ? "You owe us" : "We owe you"}</td><td className="n">{amt(Math.abs(acct.balance))}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      {s.seller_terms ? <p className="doc-terms">{s.seller_terms}</p> : null}
     </article>
   );
 }

@@ -231,6 +231,21 @@ export function buildJournal(o: Office, acct: AcctData): Journal {
     ]);
   }
 
+  // ── money settled with a seller outside a lot payout (they paid us back, or we paid them on account)
+  const sellerById = new Map(o.data.sellers.map(x => [x.id, x]));
+  for (const x of o.data.settlements || []) {
+    const seller = sellerById.get(x.seller_id);
+    if (!seller || seller.demo) continue;
+    const amount = r2(Number(x.amount) || 0);
+    const code = known(x.account_code) ? x.account_code : s.acct_payout_default && known(s.acct_payout_default) ? s.acct_payout_default : "1020";
+    const out = amount > 0;
+    const who = `${seller.code} ${seller.name}`.trim();
+    add({ id: `settle:${x.id}`, date: x.entry_date, source: "payout", title: `${out ? "Paid to seller on account" : "Seller paid us"} · ${who}`, ref: x.reference, href: `/admin/office/sellers/${seller.code}` }, [
+      { account: "2100", debit: out ? amount : 0, credit: out ? 0 : -amount, memo: x.notes || who },
+      { account: code, debit: out ? 0 : -amount, credit: out ? amount : 0, memo: x.reference || (out ? "To the seller" : "From the seller") }
+    ]);
+  }
+
   // ── entries typed under Accounting
   for (const m of acct.entries) {
     if (m.void) continue;

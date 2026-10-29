@@ -290,6 +290,14 @@ export type CardLink = {
   ledger_id: string | null;
 };
 
+/**
+ * Money that moved between us and a consignor outside a lot payout: + we paid them (on account),
+ * − they paid us (e.g. back what buyers paid them for other sellers' or our own watches).
+ */
+export type SellerSettlement = {
+  id: string; seller_id: string; entry_date: string; amount: number; account_code: string; reference: string; notes: string; created_at: string;
+};
+
 export type MessageOverrides = Record<string, { en?: string | null; ar?: string | null }>;
 
 /** Everything the back office works from. */
@@ -304,6 +312,10 @@ export type OfficeData = {
   ledger: LedgerEntry[];
   sent: SentLog[];
   cards: CardLink[];
+  /** Seller account settlements (0009); empty until that update is run. */
+  settlements?: SellerSettlement[];
+  /** True when the database doesn't have seller settlements yet (0009 not run). */
+  needs0009?: boolean;
   messages: MessageOverrides;
   /** "Now" in milliseconds, so every page computes against the same clock. */
   now: number;

@@ -65,26 +65,30 @@ export type LotView = OLot & {
   settle: SettleLot | null;
 };
 
-/** A consigned lot not yet settled with its seller, as the payout form needs it. */
-export type SettleLot = { id: string; lot_number: number; net: number; group: string; unapplied: number; groupUnpaid: number };
+/**
+ * A consigned lot not yet settled with its seller, as the payout form needs it.
+ * `held`: money the seller already has that's ours to net off (buyers who paid them directly, for any lot, plus anything
+ * we paid them on account, less what they paid us back), shared by all their unsettled lots.
+ */
+export type SettleLot = { id: string; seller: string; order: number; net: number; held: number; sellerUnpaid: number };
 
 /**
- * The cash that moves for each lot when these lots are settled with their seller.
- * A payment the buyer made straight to the seller ("unapplied" for that seller and invoice) comes off the lots of that invoice
- * in lot order; the last lot of the invoice takes whatever is left, so it can go negative (the seller owes us the difference).
+ * The cash that moves for each lot when these lots are settled with their seller. The money they hold comes off the lots
+ * in order (lots whose buyer paid them directly first, then lots paid for, then the rest). While other lots stay open, a lot
+ * never goes below 0; settling the seller's last open lot takes whatever is left, so it can go negative (they owe us).
  */
 export function settleCash(picked: SettleLot[]): Map<string, number> {
   const out = new Map<string, number>();
-  const groups = new Map<string, SettleLot[]>();
+  const bySeller = new Map<string, SettleLot[]>();
   for (const l of picked) {
-    const g = groups.get(l.group);
+    const g = bySeller.get(l.seller);
     if (g) g.push(l);
-    else groups.set(l.group, [l]);
+    else bySeller.set(l.seller, [l]);
   }
-  for (const ls of groups.values()) {
-    ls.sort((a, b) => a.lot_number - b.lot_number);
-    const finishing = ls.length >= ls[0].groupUnpaid;
-    let left = ls[0].unapplied;
+  for (const ls of bySeller.values()) {
+    ls.sort((a, b) => a.order - b.order);
+    const finishing = ls.length >= ls[0].sellerUnpaid;
+    let left = ls[0].held;
     ls.forEach((l, i) => {
       const last = finishing && i === ls.length - 1;
       const share = last ? left : Math.min(Math.max(left, 0), l.net);
@@ -216,8 +220,12 @@ export type SellerView = Seller & {
   net: number;
   /** Cash we paid the seller (less any they paid us back) when settling lots. */
   paidOut: number;
-  /** What buyers paid this seller directly. */
+  /** What buyers paid this seller directly (for their own lots or anyone else's). */
   direct: number;
+  /** Settled outside lot payouts: + we paid them on account, − they paid us. */
+  settled: number;
+  /** Money they hold that hasn't been netted off a payout yet (direct payments, less what's settled). */
+  held: number;
   /** Still to pay the seller (negative = the seller owes us). */
   owed: number;
   profit: number;
@@ -416,30 +424,41 @@ export function compute(data: OfficeData): Office {
   const invoicesByNo = new Map(invoices.map(i => [i.no, i]));
 
   // Seller payout state, now that invoices are known.
-  const sellerGroups = new Map<string, LotView[]>();
+  const sellerLots = new Map<string, LotView[]>();
   for (const l of lots) {
     if (!l.sold || l.type !== "Consignment") continue;
     if (l.seller_paid_on) l.payout = "Paid";
     else if (!l.invoiceNo) l.payout = "Wait – buyer not paid";
     else l.payout = (invoicesByNo.get(l.invoiceNo)?.balance ?? 1) <= 0 ? "Due to seller" : "Wait – buyer not paid";
-    const k = `${l.seller_id}|${l.invoiceNo || l.id}`;
-    const g = sellerGroups.get(k);
+    const k = l.seller_id || l.id;
+    const g = sellerLots.get(k);
     if (g) g.push(l);
-    else sellerGroups.set(k, [l]);
+    else sellerLots.set(k, [l]);
   }
-  // Buyers who paid the consignor directly: it comes off what settling that seller's lots on the invoice moves.
-  const directBy = new Map<string, number>();
+  // Money a seller holds that's ours to net off their payouts: buyers who paid them directly (for their own lot, another
+  // seller's or our own stock), plus anything we paid them on account, less what they've paid us back.
+  const directTo = new Map<string, number>();
+  const directInvoice = new Set<string>();
   for (const e of ledgerBase) {
-    if (e.kind !== "Payment" || e.method !== DIRECT || !e.paid_to_seller_id || !e.invoice_no) continue;
-    const k = `${e.paid_to_seller_id}|${e.invoice_no}`;
-    directBy.set(k, r2((directBy.get(k) || 0) + e.signed));
+    if (e.kind !== "Payment" || e.method !== DIRECT || !e.paid_to_seller_id) continue;
+    directTo.set(e.paid_to_seller_id, r2((directTo.get(e.paid_to_seller_id) || 0) + e.signed));
+    if (e.invoice_no) directInvoice.add(`${e.paid_to_seller_id}|${e.invoice_no}`);
   }
+  const settledTo = new Map<string, number>();
+  for (const x of data.settlements || []) settledTo.set(x.seller_id, r2((settledTo.get(x.seller_id) || 0) + n0(x.amount)));
   const cashOf = (l: LotView) => (l.payout_amount != null ? Number(l.payout_amount) : l.net);
-  for (const [k, ls] of sellerGroups) {
+  const heldBy = new Map<string, number>();
+  const heldOf = (sellerId: string, ls: LotView[]) => {
     const applied = ls.filter(l => l.seller_paid_on).reduce((t, l) => t + (l.net - cashOf(l)), 0);
-    const unapplied = r2((directBy.get(k) || 0) - applied);
-    const unpaid = ls.filter(l => !l.seller_paid_on).sort((a, b) => a.lot_number - b.lot_number);
-    const settle = unpaid.map((l): SettleLot => ({ id: l.id, lot_number: l.lot_number, net: l.net, group: k, unapplied, groupUnpaid: unpaid.length }));
+    return r2((directTo.get(sellerId) || 0) - applied + (settledTo.get(sellerId) || 0));
+  };
+  for (const [k, ls] of sellerLots) {
+    const held = heldOf(k, ls);
+    heldBy.set(k, held);
+    const unpaid = ls.filter(l => !l.seller_paid_on);
+    const order = (l: LotView) =>
+      (directInvoice.has(`${k}|${l.invoiceNo}`) ? 0 : l.payout === "Due to seller" ? 1 : 2) * 1e9 + l.auctionNo * 1e4 + l.lot_number;
+    const settle = unpaid.map((l): SettleLot => ({ id: l.id, seller: k, order: order(l), net: l.net, held, sellerUnpaid: unpaid.length }));
     const cash = settleCash(settle);
     unpaid.forEach((l, i) => {
       l.settle = settle[i];
@@ -501,9 +520,12 @@ export function compute(data: OfficeData): Office {
     const net = r2(mine.reduce((t, l) => t + l.net, 0));
     const paidOut = r2(mine.filter(l => l.payout === "Paid").reduce((t, l) => t + cashOf(l), 0));
     const direct = r2(ledger.filter(e => e.paid_to_seller_id === x.id && e.method === DIRECT && e.kind === "Payment" && (x.demo || !e.demo)).reduce((t, e) => t + e.signed, 0));
+    const settled = settledTo.get(x.id) || 0;
+    const applied = mine.filter(l => l.payout === "Paid").reduce((t, l) => t + (l.net - cashOf(l)), 0);
     return {
       ...x, lotsEntered: mine.length, lotsSold: sold.length, hammer: r2(sold.reduce((t, l) => t + n0(l.hammer), 0)),
-      fees: r2(mine.reduce((t, l) => t + l.fee, 0)), net, paidOut, direct, owed: r2(net - paidOut - direct), profit: r2(mine.reduce((t, l) => t + l.profit, 0))
+      fees: r2(mine.reduce((t, l) => t + l.fee, 0)), net, paidOut, direct, settled, held: r2(direct - applied + settled),
+      owed: r2(net - paidOut - direct - settled), profit: r2(mine.reduce((t, l) => t + l.profit, 0))
     };
   });
   const sellersById = new Map(sellersOut.map(x => [x.id, x]));
@@ -609,7 +631,8 @@ export function withoutDemo(d: OfficeData): OfficeData {
     adjustments: d.adjustments.filter(a => !demoInv(a.invoice_no)),
     ledger: d.ledger.filter(e => !(e.customer_id && demoCust.has(e.customer_id)) && !demoInv(e.invoice_no) && !(e.paid_to_seller_id && demoSell.has(e.paid_to_seller_id))),
     sent: d.sent.filter(x => !demoInv(x.ref)),
-    cards: d.cards.filter(c => !demoInv(c.invoice_no) && !(c.customer_id && demoCust.has(c.customer_id)))
+    cards: d.cards.filter(c => !demoInv(c.invoice_no) && !(c.customer_id && demoCust.has(c.customer_id))),
+    settlements: (d.settlements || []).filter(x => !demoSell.has(x.seller_id))
   };
 }
 

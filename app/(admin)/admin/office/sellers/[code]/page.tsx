@@ -4,7 +4,11 @@ import { moneyAccounts } from "@/lib/office/acct-view";
 import { amt } from "@/lib/office/engine";
 import { dateText } from "@/lib/office/messages";
 import { Pill, SetupNeeded } from "@/components/office/bits";
-import { PayoutForm, SellerForm } from "@/components/office/forms2";
+import { PayoutForm, SellerForm, SettlementForm } from "@/components/office/forms2";
+import { ConfirmRun } from "@/components/office/ConfirmRun";
+import { deleteSeller, deleteSettlement } from "../../actions2";
+import { getStaff } from "@/lib/staff";
+import { IS_PREVIEW } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -22,6 +26,11 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
   const n = (v: number | null) => (v == null ? "" : String(v));
   const acct = await loadAcctData().catch(() => null);
   const payFrom = acct ? moneyAccounts(acct.accounts).map(a => ({ code: a.code, name: a.name })) : [];
+  const staff = IS_PREVIEW ? null : await getStaff();
+  const admin = IS_PREVIEW || staff?.role === "admin";
+  const settlements = (o.data.settlements || []).filter(s => s.seller_id === x.id).sort((a, b) => b.entry_date.localeCompare(a.entry_date));
+  const directs = o.ledger.filter(e => e.paid_to_seller_id === x.id && e.kind === "Payment").slice().reverse();
+  const consign = x.kind !== "own";
   return (
     <div className="stack" style={{ gap: 18 }}>
       <div className="adm-head">
@@ -29,7 +38,10 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
           <h1 className="disp">{x.code} · {x.name}</h1>
           <p className="fine">{x.kind === "own" ? "Own stock" : "Consignment"}{x.phone ? ` · ${x.phone}` : ""}{x.iban ? ` · IBAN ${x.iban}` : ""}</p>
         </div>
-        <Link className="btn sm" href="/admin/office/sellers">All sellers</Link>
+        <div className="row">
+          {consign ? <Link className="btn sm" href={`/admin/office/sellers/${x.code}/account`}>Account statement</Link> : null}
+          <Link className="btn sm" href="/admin/office/sellers">All sellers</Link>
+        </div>
       </div>
       <div className="stats">
         <div><span className="k">Lots</span><b>{x.lotsEntered}</b></div>
@@ -38,28 +50,76 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
         <div><span className="k">Fees</span><b>{amt(x.fees)}</b></div>
         <div><span className="k">Net to seller</span><b>{amt(x.net)}</b></div>
         {x.direct ? <div><span className="k">Buyers paid them directly</span><b>{amt(x.direct)}</b></div> : null}
+        {Math.abs(x.held) > 0.005 ? <div><span className="k">{x.held > 0 ? "They hold for us (not settled)" : "We owe on account"}</span><b>{amt(Math.abs(x.held))}</b></div> : null}
         {x.owed < -0.005 ? (
           <div><span className="k">Seller owes us</span><b className="warn-ink">{amt(-x.owed)}</b></div>
         ) : (
           <div><span className="k">Still owed</span><b className={x.owed > 0.005 ? "warn-ink" : undefined}>{amt(x.owed)}</b></div>
         )}
       </div>
-      {x.kind !== "own" ? (
+      {consign ? (
         <section className="panel-card">
           <span className="k">Payouts</span>
           <PayoutForm
-            lots={owing.map(l => ({
-              id: l.id, key: l.key, watch: `${l.brand} ${l.model}`.trim(), net: l.net, invoice: l.invoiceNo || "", state: l.payout, settle: l.settle,
-              direct: l.settle?.lot_number === Math.min(...owing.filter(x => x.settle?.group === l.settle?.group).map(x => x.lot_number)) ? Math.max(0, l.settle?.unapplied || 0) : 0
-            }))}
+            lots={owing.map(l => ({ id: l.id, key: l.key, watch: `${l.brand} ${l.model}`.trim(), net: l.net, invoice: l.invoiceNo || "", state: l.payout, settle: l.settle }))}
+            held={owing.length ? x.held : 0}
             accounts={payFrom}
             defaultAccount={o.data.settings.acct_payout_default}
           />
         </section>
       ) : null}
+      {consign ? (
+        <details className="panel-card" open={x.owed < -0.005 && !owing.length}>
+          <summary><strong>Settle up outside a payout</strong> <span className="fine">(the seller pays us back, or we pay them on account)</span></summary>
+          {o.data.needs0009 ? (
+            <p className="alert">To record this, run <code>supabase/migrations/0009_seller_settlements.sql</code> in the Supabase SQL Editor first.</p>
+          ) : (
+            <>
+              <p className="fine">
+                When buyers paid this seller for watches that weren&apos;t theirs (another seller&apos;s, or our own stock), the money is ours: it comes off their next payout above.
+                If there&apos;s no payout to take it from, record here what they paid us back.
+                {x.owed < -0.005 ? <> Right now they owe us <b>AED {amt(-x.owed)}</b>.</> : null}
+              </p>
+              <SettlementForm sellerId={x.id} owed={x.owed < 0 ? x.owed : 0} accounts={payFrom} defaultAccount={o.data.settings.acct_payout_default} />
+            </>
+          )}
+        </details>
+      ) : null}
+      {directs.length || settlements.length ? (
+        <section className="panel-card">
+          <span className="k">Money between us and this seller</span>
+          <div className="tbl-wrap">
+            <table>
+              <thead><tr><th>Date</th><th>What</th><th>Invoice / reference</th><th className="n">AED</th><th /></tr></thead>
+              <tbody>
+                {directs.map(e => (
+                  <tr key={e.id}>
+                    <td className="nowrap">{e.entry_date}</td>
+                    <td>Buyer {e.customer?.code || "?"} paid them directly{e.demo ? <small className="sub">demo</small> : null}</td>
+                    <td className="mono">{e.invoice_no ? <Link href={`/admin/office/invoices/${e.invoice_no}`}>{e.invoice_no}</Link> : ""}{e.reference ? <small className="sub">{e.reference}</small> : null}</td>
+                    <td className="n">{amt(e.amount)}</td>
+                    <td />
+                  </tr>
+                ))}
+                {settlements.map(st => (
+                  <tr key={st.id}>
+                    <td className="nowrap">{st.entry_date}</td>
+                    <td>{st.amount < 0 ? "The seller paid us" : "We paid the seller on account"}{st.notes ? <small className="sub">{st.notes}</small> : null}</td>
+                    <td>{st.reference}</td>
+                    <td className="n">{amt(Math.abs(st.amount))}</td>
+                    <td>{admin ? <ConfirmRun label="Remove" ask="Are you sure you want to remove this settlement?" run={deleteSettlement.bind(null, st.id)} /> : null}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="fine">Payments made to the seller by buyers are removed on the invoice&apos;s page (or Payments).</p>
+        </section>
+      ) : null}
       <section className="panel-card">
         <span className="k">Paperwork</span>
         <div className="row">
+          {consign ? <Link className="btn sm" href={`/admin/office/sellers/${x.code}/account`}>Account statement (every auction)</Link> : null}
           {auctions.map(a => <Link key={a.id} className="btn sm" href={`/admin/office/statements?a=${a.number}&seller=${x.code}`}>Statement · auction {a.number}</Link>)}
           {receipts.map(r => <Link key={r} className="btn sm" href={`/admin/office/intake/${r}`}>Receipt {r}</Link>)}
           {!auctions.length && !receipts.length ? <span className="fine">No lots or receipts yet.</span> : null}
@@ -99,6 +159,15 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
           }}
         />
       </section>
+      {admin && !x.demo ? (
+        <section className="panel-card">
+          <span className="k">Delete this seller</span>
+          <p className="fine">Added by mistake? Only a seller with no lots, intake receipts, payments from buyers or settlements can be deleted. Admins only.</p>
+          <div className="row">
+            <ConfirmRun label={`Delete seller ${x.code}`} className="btn danger" ask={`Are you sure you want to delete seller ${x.code} · ${x.name}?\n\nThis can't be undone.`} run={deleteSeller.bind(null, x.id)} then="/admin/office/sellers" />
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

@@ -44,9 +44,13 @@ export default async function OfficeInvoice({ params }: { params: Promise<{ no: 
   const adj = inv.adjustment;
   const confirm = { phone: c.phone, mode: s.wa_mode, name: c.full_name, ref: inv.no, code: m.code, invoice: inv.no, balanceBefore: inv.balance, settings: s, overrides: o.data.messages };
   const n = (v: number | null | undefined) => (v == null ? "" : String(v));
-  // consignors whose lots on this invoice aren't settled yet: the buyer may have paid one of them directly
-  const consignors = [...new Map(inv.lots.filter(l => l.type === "Consignment" && l.seller && !l.seller_paid_on).map(l => [l.seller!.id, l.seller!])).values()]
-    .map(x => ({ id: x.id, label: `${x.code} · ${x.name}` }));
+  // the buyer may have paid a consignor directly: this invoice's own consignors first, then any other (they hold it for us)
+  const onInvoice = new Set(inv.lots.filter(l => l.type === "Consignment" && l.seller).map(l => l.seller!.id));
+  const consignors = o.data.sellers
+    .filter(x => x.kind !== "own" && !!x.demo === !!inv.demo)
+    .sort((a, b) => Number(onInvoice.has(b.id)) - Number(onInvoice.has(a.id)) || a.code.localeCompare(b.code))
+    .map(x => ({ id: x.id, label: `${x.code} · ${x.name}${onInvoice.has(x.id) ? " (on this invoice)" : ""}` }));
+  const defaultSeller = onInvoice.size === 1 ? [...onInvoice][0] : "";
   return (
     <div className="stack" style={{ gap: 18 }}>
       <div className="adm-head no-print">
@@ -91,7 +95,7 @@ export default async function OfficeInvoice({ params }: { params: Promise<{ no: 
           ) : null}
           {inv.balance > 0.005 ? (
             <div className="panel-card">
-              <EntryForm kind="Payment" title={`Record payment · balance AED ${amt(inv.balance)}`} customerId={c.id} invoiceNo={inv.no} amount={inv.balance} method={inv.paysBy} lockBuyer confirm={confirm} sellers={consignors} />
+              <EntryForm kind="Payment" title={`Record payment · balance AED ${amt(inv.balance)}`} customerId={c.id} invoiceNo={inv.no} amount={inv.balance} method={inv.paysBy} lockBuyer confirm={confirm} sellers={consignors} defaultSeller={defaultSeller} />
             </div>
           ) : null}
           {inv.balance < -0.005 ? (

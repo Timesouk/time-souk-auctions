@@ -48,9 +48,10 @@ These involve approvals by other companies. Start them now and carry on with the
    Then `supabase/migrations/0006_back_office.sql` (the back office: buyers, sellers, intake, consolidated invoices, payments, card links). Run it **after** 0005.
    Then `supabase/migrations/0007_accounting.sql` (accounting: chart of accounts, entries, reconciliation, closing the books). Run it **after** 0006.
    Then `supabase/migrations/0008_office_extras.sql` (Instagram-only auctions, the demo auction for training, buyers who pay the consignor directly). Run it **after** 0007.
+   Then `supabase/migrations/0009_seller_settlements.sql` (settling a consignor's account outside a payout). Run it **after** 0008.
 4. Check **Table Editor**: you should see tables such as `auctions`, `lots`, `bids`, `invoices`, `profiles`.
 
-> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0008 are safe to run again. If Supabase shows **Potential issues detected** before running one, that's expected: the "destructive" lines only remove an old rule and add it straight back, and no data is deleted. Press **Run and enable RLS**.
+> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0009 are safe to run again. If Supabase shows **Potential issues detected** before running one, that's expected: the "destructive" lines only remove an old rule and add it straight back, and no data is deleted. Press **Run and enable RLS**.
 
 ### 1.3 Copy the API keys into Vercel later
 You'll need these three values in Part 3. Find them in **Project Settings → API Keys** (and **Project Settings → Data API** for the URL):
@@ -383,7 +384,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | Problem | Fix |
 |---|---|
 | Site still shows sample watches | Supabase variables missing, or you didn't redeploy after adding them. |
-| Site shows an error after connecting Supabase | Check all eight database files ran, in order: `0001` to `0008` (Part 1.2). |
+| Site shows an error after connecting Supabase | Check all nine database files ran, in order: `0001` to `0009` (Part 1.2). |
 | Can't change the timer on a lot | Its timer is running. Sudden death: stop it, or let it end and Reopen. |
 | No email code | Check Resend → **Logs**. Check Supabase SMTP settings (Part 2.3), and that the templates contain `{{ .Token }}`. Look in spam. |
 | Email code says "invalid" | Codes expire after 10 minutes and only the newest code works. Ask for a new one. |
@@ -411,7 +412,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 
 ### 13.1 Once
 
-1. Run `supabase/migrations/0006_back_office.sql`, `0007_accounting.sql` and `0008_office_extras.sql` (Part 1.2) if you haven't.
+1. Run `supabase/migrations/0006_back_office.sql`, `0007_accounting.sql`, `0008_office_extras.sql` and `0009_seller_settlements.sql` (Part 1.2) if you haven't.
 2. **Back office → Settings** (admin): check the company and bank details, the co-branded name (**DXB Watch × The Time Souk**), fees, hours to pay, delivery and cash on delivery charges, the card fee, the WhatsApp language, and the text printed on documents. Have a lawyer review the intake declaration and seller declaration.
 3. **Back office → Import** (admin): save the workbook in Excel, then choose the `.xlsm` file. The page shows what's in it and what the invoices add up to per auction: compare with the Auctions sheet in Excel, then press **Import into the back office**. Auctions not yet on the website arrive as **Instagram only** (real auctions, not shown on the website). The Ziina key on the workbook's Settings sheet is never read. You can import again later with a newer copy: records are matched and updated, not doubled.
 4. Card links: the back office uses the website's Ziina key (`ZIINA_API_KEY`, Part 5.1). Without it, paste links made in the Ziina app on each invoice's page.
@@ -429,10 +430,11 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | After the live | **Invoices** | **Send** each invoice on WhatsApp (with a private link to the printable invoice). Overseas buyers: type the delivery fee on the invoice's page first. |
 | Buyer replies LINK | the invoice's page | **Make a card link**, then **Send link on WhatsApp**. Paid links are recorded on Payments by themselves. |
 | Money arrives | the invoice's page | **Record payment** (full balance and the usual method are filled in), then **Send confirmation on WhatsApp**. Deposits: the buyer's page. |
-| Buyer paid the consignor directly | the invoice's page | **Record payment**, method **Paid to seller directly**, choose the seller. The invoice counts it as paid; it comes off what you pay that seller. If it's more than their net, the seller owes us the difference (our fee). |
+| Buyer paid a consignor directly | the invoice's page | **Record payment**, method **Paid to seller directly**, choose the seller who got the money: the watch's own seller, or any other consignor the buyer knows (even for our own stock). The invoice counts it as paid. That seller holds the money for us: it comes off their next payout, or, with no payout coming, they pay it back (**Sellers →** the seller → **Settle up outside a payout**). |
+| A buyer or seller added by mistake | **Buyers →** the buyer, **Sellers →** the seller | **Delete** at the bottom (admin), then confirm. Only when they have no lots, payments, intake receipts or settlements. |
 | Chasing payment | **Invoices → Unpaid** | **Remind** on each row; buyers reminded recently show the time instead. |
 | Packing and delivery | **Lots → After the sale**, **Dispatch** | Delivery status, tray, courier and AWB; print the dispatch list for the courier to sign. |
-| Paying sellers | **Sellers →** the seller | Tick the lots paid for by their buyers, **Mark paid**: the amount already takes off anything buyers paid the seller directly. When the seller owes us instead, it reads **Mark settled · seller paid us**: press it once they've paid. Then **Statements** for the seller's statement. |
+| Paying sellers | **Sellers →** the seller | Tick the lots paid for by their buyers, **Mark paid**: the amount already takes off any money the seller holds for us (buyers who paid them directly, for any watch). When the seller owes us instead, it reads **Mark settled · seller paid us**: press it once they've paid. **Account statement** shows their whole account, every auction, with a running balance; **Statements** shows one auction. |
 | Returns and refunds | **Lots** (Exception: Returned by buyer / Withdrawn / Buyer defaulted), **Payments → Refunds to make** | The lot leaves the invoice; the money to give back is listed. **Refund** records it and offers the WhatsApp message. |
 
 ### 13.3 Accounting

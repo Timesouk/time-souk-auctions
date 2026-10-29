@@ -9,7 +9,7 @@ import {
   DEFAULT_ACCT_METHODS, DEFAULT_SETTINGS,
   type Account, type AcctData, type Cleared, type ManualEntry, type Reconciliation,
   type Adjustment, type CardLink, type Customer, type IntakeItem, type LedgerEntry, type MessageOverrides, type OAuction,
-  type OfficeData, type OfficeSettings, type OLot, type Seller, type SentLog
+  type OfficeData, type OfficeSettings, type OLot, type Seller, type SellerSettlement, type SentLog
 } from "./types";
 
 const PAGE = 1000;
@@ -102,6 +102,16 @@ async function loadLive(): Promise<OfficeData> {
     fetchAll<CardLink>(db, "card_links", "id, created_at, kind, invoice_no, lot_key, customer_id, name, amount, fee, card_amount, expires_at, ziina_id, url, status, checked_at, ledger_id", "created_at"),
     fetchAll<{ key: string; en: string | null; ar: string | null }>(db, "office_messages", "key, en, ar", "key")
   ]);
+  // seller settlements arrive with 0009: until it's run, there simply aren't any
+  let settlements: SellerSettlement[] = [];
+  let needs0009 = false;
+  try {
+    settlements = (await fetchAll<SellerSettlement>(db, "seller_settlements", "id, seller_id, entry_date, amount, account_code, reference, notes, created_at", "entry_date"))
+      .map(x => ({ ...x, amount: Number(x.amount) }));
+  } catch (e) {
+    if (!/seller_settlements/.test((e as Error).message || "")) throw e;
+    needs0009 = true;
+  }
   const overrides: MessageOverrides = {};
   for (const m of messages) overrides[m.key] = { en: m.en, ar: m.ar };
   return {
@@ -118,6 +128,8 @@ async function loadLive(): Promise<OfficeData> {
     ledger: ledger.map(e => ({ ...e, seq: Number(e.seq), amount: Number(e.amount) })),
     sent: nums(sent, ["total", "balance"]),
     cards: nums(cards, ["amount", "fee", "card_amount"]).map(c => ({ ...c, amount: c.amount || 0, fee: c.fee || 0, card_amount: c.card_amount || 0 })),
+    settlements,
+    needs0009,
     messages: overrides,
     now: Date.now()
   };
