@@ -3,6 +3,7 @@ import { MESSAGES } from "@/lib/office/messages";
 import { SetupNeeded } from "@/components/office/bits";
 import { MessageEditor, OfficeSettingsForm } from "@/components/office/SettingsForms";
 import { DemoPanel } from "@/components/office/DemoPanel";
+import { FeeScaleEditor } from "@/components/office/FeeScale";
 import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
 
@@ -35,7 +36,25 @@ export default async function OfficeSettingsPage({ searchParams }: { searchParam
         <a className="chip" href="/admin/office/settings?tab=messages" aria-pressed={tab === "messages"}>WhatsApp wording<small>{Object.keys(data.messages).length} edited</small></a>
         <a className="chip" href="/admin/office/settings?tab=demo" aria-pressed={tab === "demo"}>Demo auction (training){demo ? <small>auction {demo.number}</small> : null}</a>
       </div>
-      {tab === "settings" ? <OfficeSettingsForm value={data.settings} /> : null}
+      {tab === "settings" ? (
+        <>
+          <section className="panel-card" id="fee-scale">
+            <span className="k">Seller fee scale (by sold price)</span>
+            <p className="fine">
+              Set a different fee for different sold prices, e.g. a fixed AED 300 up to AED 5,000, then 7.5%, then 5% above AED 20,000. It&apos;s the standard for every consignor;
+              a seller can have their own scale or their own % on their page, and a single lot can have its own fee.
+            </p>
+            <FeeScaleEditor
+              value={data.settings.fee_scale}
+              from={data.settings.fee_scale_from}
+              fallback={`the standard ${data.settings.fee_pct}%${data.settings.fee_fixed ? ` + AED ${data.settings.fee_fixed}` : ""} below (Auction rules)`}
+              feeMin={data.settings.fee_min}
+              needs0010={data.needs0010}
+            />
+          </section>
+          <OfficeSettingsForm value={data.settings} />
+        </>
+      ) : null}
       {tab === "messages" ? <MessageEditor messages={MESSAGES} overrides={data.messages} /> : null}
       {tab === "demo" ? (
         <section className="panel-card stack" style={{ gap: 12, maxWidth: 820 }}>

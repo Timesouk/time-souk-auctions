@@ -782,3 +782,16 @@ test("0009: seller settlements can be run again, staff read them, nobody writes 
   await db.query("delete from seller_settlements where seller_id = $1", [s]);
   await db.query("delete from sellers where id = $1", [s]);
 });
+
+test("0010: fee scales can be run again; the standard scale defaults to none, a seller's to not set", async () => {
+  const sql = readFileSync(new URL("0010_fee_scales.sql", migrationsDir), "utf8").replace(/^notify pgrst.*$/m, "");
+  await db.exec(sql);
+  await db.exec(sql);
+  assert.deepEqual((await one("select fee_scale from office_settings where id = 1")).fee_scale, []);
+  const s = (await one("insert into sellers (code, name) values ('S961', 'Scale test') returning id, fee_scale"));
+  assert.equal(s.fee_scale, null);
+  const scale = { from: "2026-11-01", bands: [{ upTo: 5000, pct: 0, fixed: 300 }, { upTo: null, pct: 5, fixed: 0 }] };
+  await db.query("update sellers set fee_scale = $1 where id = $2", [JSON.stringify(scale), s.id]);
+  assert.deepEqual((await one("select fee_scale from sellers where id = $1", [s.id])).fee_scale, scale);
+  await db.query("delete from sellers where id = $1", [s.id]);
+});

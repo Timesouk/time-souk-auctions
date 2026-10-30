@@ -1,5 +1,6 @@
 // The back office's rules: every number the auction workbook calculated, in one place.
 // Pure functions (no database), so the same answers show on every page and the rules can be tested.
+import { bandFor, feeRule, type FeeBand } from "./fees";
 import {
   COD, DIRECT, UAE,
   type Adjustment, type CardLink, type Customer, type IntakeItem, type LedgerEntry, type OAuction, type OfficeData,
@@ -52,6 +53,8 @@ export type LotView = OLot & {
   reserveCheck: "" | "Below reserve" | "No reserve set";
   feePct: number | null;
   feeFixed: number | null;
+  /** The fee scale this lot's fee came from (the band is picked by the sold price), or null for a flat fee. */
+  feeScale: FeeBand[] | null;
   fee: number;
   vatFee: number;
   net: number;
@@ -136,8 +139,11 @@ function lotView(l: OLot, ctx: { auctions: Map<string, OAuction>; sellers: Map<s
   else if (auction.sale_date === ctx.today) status = "Open";
   else status = "Unsold";
   const consign = type === "Consignment";
-  const feePct = consign ? (l.seller_fee != null ? l.seller_fee : seller?.fee_pct != null ? seller.fee_pct : n0(ctx.s.fee_pct)) : null;
-  const feeFixed = consign ? (l.fee_fixed != null ? l.fee_fixed : seller?.fee_fixed != null ? seller.fee_fixed : n0(ctx.s.fee_fixed)) : null;
+  // the lot's own fee, the seller's (scale or flat), or the standard (scale or flat); a scale picks the band by the sold price
+  const rule = consign ? feeRule(l, seller, ctx.s, auction?.sale_date) : null;
+  const band = rule?.scale ? bandFor(rule.scale, hammer) : null;
+  const feePct = rule ? (rule.scale ? band?.pct ?? 0 : rule.pct) : null;
+  const feeFixed = rule ? (rule.scale ? band?.fixed ?? 0 : rule.fixed) : null;
   const fee = sold && consign ? Math.min(hammer, Math.max(r2((hammer * n0(feePct)) / 100) + n0(feeFixed), n0(ctx.s.fee_min))) : 0;
   const vatFee = r2((fee * n0(ctx.s.vat_fee_pct)) / 100);
   const net = sold && consign ? r2(hammer - fee - vatFee) : 0;
@@ -148,7 +154,7 @@ function lotView(l: OLot, ctx: { auctions: Map<string, OAuction>; sellers: Map<s
     ...l, auction, auctionNo, key: lotKey(auctionNo, l.lot_number), seller, type, customer, sold, status,
     invoiceNo: sold ? inv : null,
     invoiceKey: hasWinner && hammer > 0 && customer ? inv : null,
-    reserveCheck, feePct, feeFixed, fee, vatFee, net, profit,
+    reserveCheck, feePct, feeFixed, feeScale: rule?.scale || null, fee, vatFee, net, profit,
     payout: "", // filled in once invoices are known
     demo: !!auction?.demo, toPay: net, settle: null
   };

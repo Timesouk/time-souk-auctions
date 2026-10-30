@@ -12,6 +12,7 @@ import { ConfirmRun } from "@/components/office/ConfirmRun";
 import { deleteIntakeItem, deleteIntakeReceipt } from "../../actions2";
 import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
+import { feeRule } from "@/lib/office/fees";
 
 export const dynamic = "force-dynamic";
 
@@ -29,11 +30,10 @@ export default async function IntakeReceipt({ params }: { params: Promise<{ rece
   const inAuction = items.filter(i => i.lot);
   const code = langCode(s.wa_lang);
   const url = receiptUrl(no, code === "AR" ? "ar" : "en");
-  const feePct = items[0].fee_pct ?? seller?.fee_pct ?? s.fee_pct;
-  const feeFixed = items[0].fee_fixed ?? seller?.fee_fixed ?? s.fee_fixed;
+  const rule = feeRule({ seller_fee: items[0].fee_pct, fee_fixed: items[0].fee_fixed }, seller, s);
   const text = receiptMessage(new Wording(s, o.data.messages), {
     code, receipt: no, date: items[0].received_on, name: seller?.name || "", items: items.map(i => ({ brand: i.brand, model: i.model, reference: i.reference, serial: i.serial, reserve: i.reserve })),
-    feePct, feeFixed, url
+    feePct: rule.pct, feeFixed: rule.fixed, feeScale: rule.scale, url
   });
   return (
     <div className="stack" style={{ gap: 18 }}>

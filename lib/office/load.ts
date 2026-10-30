@@ -5,6 +5,7 @@ import { IS_PREVIEW } from "../env";
 import { compute, withoutDemo, type Office } from "./engine";
 import { sampleAccounting, sampleOffice } from "./sample";
 import { buildJournal, type Journal } from "./accounting";
+import { parseScale } from "./fees";
 import {
   DEFAULT_ACCT_METHODS, DEFAULT_SETTINGS,
   type Account, type AcctData, type Cleared, type ManualEntry, type Reconciliation,
@@ -34,6 +35,9 @@ export function toSettings(row: Record<string, unknown> | null | undefined): Off
     (s as Record<string, unknown>)[k] = Number((s as Record<string, unknown>)[k]) || 0;
   }
   s.pay_clock = hm(s.pay_clock) || "21:00";
+  const fs = parseScale(row?.fee_scale);
+  s.fee_scale = fs.bands;
+  s.fee_scale_from = fs.from;
   const m = (row?.acct_methods && typeof row.acct_methods === "object" ? row.acct_methods : {}) as Record<string, string>;
   s.acct_methods = { ...DEFAULT_ACCT_METHODS, ...m };
   s.acct_payout_default = String(row?.acct_payout_default || "1020");
@@ -84,6 +88,8 @@ export async function loadOfficeData(): Promise<OfficeData> {
   }
 }
 
+const SELLER_COLS = "id, code, name, kind, phone, instagram, email, id_checked, fee_pct, fee_fixed, bank, iban, notes, demo";
+
 async function loadLive(): Promise<OfficeData> {
   const db = adminClient();
   const [settingsRow, auctions, lots, customers, sellers, intake, adjustments, ledger, sent, cards, messages] = await Promise.all([
@@ -94,7 +100,11 @@ async function loadLive(): Promise<OfficeData> {
     fetchAll<Record<string, unknown>>(db, "auctions", "id, number, sale_date, live_starts_at, status, pay_clock, office_notes, lot_target, instagram, demo", "number"),
     fetchAll<LotRow>(db, "lots", LOT_SELECT, "id"),
     fetchAll<Customer>(db, "customers", "id, code, instagram, full_name, phone, email, address, area, country, delivery, usual_pay, id_checked, flag, notes, lang, profile_id, demo", "code"),
-    fetchAll<Seller>(db, "sellers", "id, code, name, kind, phone, instagram, email, id_checked, fee_pct, fee_fixed, bank, iban, notes, demo", "code"),
+    // fee scales arrive with 0010: until it's run, sellers load without them
+    fetchAll<Seller>(db, "sellers", `${SELLER_COLS}, fee_scale`, "code").catch(e => {
+      if (!/fee_scale/.test((e as Error).message || "")) throw e;
+      return fetchAll<Seller>(db, "sellers", SELLER_COLS, "code").then(rows => rows.map(r => ({ ...r, fee_scale: undefined, _no0010: true })));
+    }),
     fetchAll<IntakeItem>(db, "intake_items", "id, receipt_no, item_id, position, received_on, seller_id, brand, model, reference, serial, year, box_papers, condition, notes, reserve, start_price, fee_pct, fee_fixed, received_by, returned_on", "item_id"),
     fetchAll<Adjustment>(db, "invoice_adjustments", "invoice_no, delivery, pays_by, delivery_fee, discount, extra, extra_label, note", "invoice_no"),
     fetchAll<LedgerEntry>(db, "ledger", "id, seq, entry_date, kind, customer_id, invoice_no, method, amount, reference, received_by, notes, created_at, paid_to_seller_id", "seq"),
@@ -122,7 +132,12 @@ async function loadLive(): Promise<OfficeData> {
     })),
     lots: lots.map(toLot),
     customers,
-    sellers: nums(sellers, ["fee_pct", "fee_fixed"]),
+    sellers: nums(sellers, ["fee_pct", "fee_fixed"]).map(x => {
+      const { _no0010, ...rest } = x as Seller & { _no0010?: boolean };
+      void _no0010;
+      const fs = parseScale(x.fee_scale);
+      return { ...rest, fee_scale: fs.bands, fee_scale_from: fs.from };
+    }),
     intake: nums(intake, ["reserve", "start_price", "fee_pct", "fee_fixed"]),
     adjustments: nums(adjustments, ["delivery_fee", "discount", "extra"]),
     ledger: ledger.map(e => ({ ...e, seq: Number(e.seq), amount: Number(e.amount) })),
@@ -130,6 +145,7 @@ async function loadLive(): Promise<OfficeData> {
     cards: nums(cards, ["amount", "fee", "card_amount"]).map(c => ({ ...c, amount: c.amount || 0, fee: c.fee || 0, card_amount: c.card_amount || 0 })),
     settlements,
     needs0009,
+    needs0010: !(settingsRow && "fee_scale" in settingsRow),
     messages: overrides,
     now: Date.now()
   };

@@ -13,6 +13,7 @@ import { BOX_PAPERS, CONDITIONS, DEFAULT_SETTINGS, type IntakeItem } from "@/lib
 import type { Result } from "../actions";
 import { booksClosedUpTo, closedMessage } from "@/lib/office/lock";
 import { deliveryPlan, isDeliveryStep, stepWords, stillOwes } from "@/lib/office/delivery";
+import { cleanScale, scaleProblem } from "@/lib/office/fees";
 
 const ok = (message: string, id?: string): Result => ({ ok: true, message, id });
 /** A column added by 0008 missing means that update hasn't been run yet: say so plainly. */
@@ -569,6 +570,26 @@ export async function saveOfficeSettings(input: Record<string, string | string[]
     refresh();
     return ok("Settings saved. Invoices and messages use them now.");
   }, true);
+}
+
+/** Saves a seller fee scale: the standard one (admin), or one seller's own (empty = not used). */
+export async function saveFeeScale(input: { sellerId?: string; bands: { upTo: string; pct: string; fixed: string }[]; from?: string }) {
+  return guard(async () => {
+    const rows = (input.bands || []).slice(0, 20).map(b => ({ upTo: String(b.upTo ?? ""), pct: String(b.pct ?? ""), fixed: String(b.fixed ?? "") }));
+    const problem = scaleProblem(rows);
+    if (problem) return bad(problem);
+    const scale = cleanScale(rows.map(b => ({ upTo: b.upTo.trim() === "" ? null : b.upTo, pct: b.pct.trim() || 0, fixed: b.fixed.trim() || 0 })));
+    const from = ymd(input.from);
+    const stored = { from, bands: scale };
+    const db = adminClient();
+    const res = input.sellerId
+      ? await db.from("sellers").update({ fee_scale: scale.length ? stored : null }).eq("id", input.sellerId)
+      : await db.from("office_settings").update({ fee_scale: scale.length ? stored : [], updated_at: new Date().toISOString() }).eq("id", 1);
+    if (res.error) return bad(/fee_scale/.test(res.error.message) ? "Run supabase/migrations/0010_fee_scales.sql in the Supabase SQL Editor first." : res.error.message);
+    refresh();
+    if (!scale.length) return ok(input.sellerId ? "This seller's scale is off: their fee is set as before." : "Standard scale off: the standard % and fixed fee apply.");
+    return ok(`Fee scale saved (${scale.length} band${scale.length === 1 ? "" : "s"})${from ? `, for auctions from ${from} on` : ", for every auction"}. Sold lots it covers are worked out again now.`);
+  }, !input.sellerId);
 }
 
 /** Changes one message's wording (blank = the default). */
