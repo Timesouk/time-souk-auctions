@@ -8,6 +8,10 @@ import { ReceiptDoc } from "@/components/office/SellerDocs";
 import { AddLines, IntakeTable } from "@/components/office/forms2";
 import { CopyButton, PrintButton } from "@/components/office/forms";
 import { WaButton } from "@/components/office/Wa";
+import { ConfirmRun } from "@/components/office/ConfirmRun";
+import { deleteIntakeItem, deleteIntakeReceipt } from "../../actions2";
+import { getStaff } from "@/lib/staff";
+import { IS_PREVIEW } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 
@@ -20,6 +24,9 @@ export default async function IntakeReceipt({ params }: { params: Promise<{ rece
   if (!items.length) return <p className="empty">No receipt {no}. <Link href="/admin/office/intake">Intake</Link></p>;
   const s = o.data.settings;
   const seller = items[0].seller;
+  const staff = IS_PREVIEW ? null : await getStaff();
+  const admin = IS_PREVIEW || staff?.role === "admin";
+  const inAuction = items.filter(i => i.lot);
   const code = langCode(s.wa_lang);
   const url = receiptUrl(no, code === "AR" ? "ar" : "en");
   const feePct = items[0].fee_pct ?? seller?.fee_pct ?? s.fee_pct;
@@ -48,6 +55,36 @@ export default async function IntakeReceipt({ params }: { params: Promise<{ rece
         <h2 className="h-sec">Where each watch is now</h2>
         <IntakeTable rows={items.map(intakeRow)} auctions={auctionChoices(o)} showReceipt={false} />
       </section>
+      {admin ? (
+        <section className="panel-card no-print">
+          <span className="k">Entered by mistake?</span>
+          <p className="fine">
+            Delete the whole receipt, or remove one watch from it. A watch that&apos;s already a lot in an auction can&apos;t be removed here: delete that lot first (Lots › Delete), as long as it has no result.
+            Once a seller has no receipts, lots or payments left, you can delete the seller on their page. Admins only.
+          </p>
+          <div className="row" style={{ gap: 6 }}>
+            {items.map(i => (
+              <ConfirmRun
+                key={i.id}
+                label={`Remove ${i.item_id}`}
+                className="btn sm"
+                ask={`Remove ${i.item_id} (${`${i.brand} ${i.model}`.trim()}) from receipt ${no}?\n\nThis can't be undone.`}
+                run={deleteIntakeItem.bind(null, i.id)}
+                then={items.length === 1 ? "/admin/office/intake" : undefined}
+              />
+            ))}
+          </div>
+          <div className="row">
+            <ConfirmRun
+              label={`Delete receipt ${no}`}
+              className="btn danger"
+              ask={`Delete receipt ${no} and its ${items.length} watch${items.length === 1 ? "" : "es"}?${inAuction.length ? `\n\n${inAuction.length} of them ${inAuction.length === 1 ? "is" : "are"} in an auction: delete ${inAuction.length === 1 ? "that lot" : "those lots"} first.` : ""}\n\nThis can't be undone.`}
+              run={deleteIntakeReceipt.bind(null, no)}
+              then={seller ? `/admin/office/sellers/${seller.code}` : "/admin/office/intake"}
+            />
+          </div>
+        </section>
+      ) : null}
       {!s.intake_terms ? <p className="fine no-print">Add the intake declaration under Settings (it prints above the signatures). Have a lawyer review the wording.</p> : null}
     </div>
   );

@@ -111,7 +111,10 @@ export async function deleteSeller(id: string) {
       db.from("ledger").select("id").eq("paid_to_seller_id", id)
     ]);
     if (lots?.length) return bad(`${x.code} has ${lots.length} lot${lots.length === 1 ? "" : "s"}. Give them another seller (Lots › Lot details) or delete them first.`);
-    if (intake?.length) return bad(`${x.code} has intake receipt${new Set(intake.map(i => i.receipt_no)).size === 1 ? "" : "s"} ${[...new Set(intake.map(i => i.receipt_no))].join(", ")}, so they stay on record.`);
+    if (intake?.length) {
+      const rs = [...new Set(intake.map(i => i.receipt_no))];
+      return bad(`${x.code} has intake receipt${rs.length === 1 ? "" : "s"} ${rs.join(", ")}. If ${rs.length === 1 ? "it was" : "they were"} entered by mistake, delete ${rs.length === 1 ? "it" : "them"} first (Intake › the receipt › Delete this receipt, at the bottom), then delete the seller.`);
+    }
     if (direct?.length) return bad(`Buyers paid ${x.code} directly (${direct.length} payment${direct.length === 1 ? "" : "s"}). Remove those on Payments first, or keep the seller.`);
     const { data: settled, error: se } = await db.from("seller_settlements").select("id").eq("seller_id", id).limit(1);
     if (!se && settled?.length) return bad(`${x.code} has settlements on their account, so they stay on record.`);
@@ -271,6 +274,56 @@ function intakeFields(l: IntakeLine) {
     condition: (CONDITIONS as readonly string[]).includes(l.condition) ? l.condition : str(l.condition, 40), notes: str(l.notes, 500),
     reserve: amount(l.reserve), start_price: amount(l.start_price), fee_pct: str(l.fee_pct) === "" ? null : amount(l.fee_pct), fee_fixed: str(l.fee_fixed) === "" ? null : amount(l.fee_fixed)
   };
+}
+
+/**
+ * Removes intake watches entered by mistake: one watch, or a whole receipt. Refused while a watch is a lot in an auction
+ * (delete that lot first; a lot with a result or bids stays). Admins only.
+ */
+async function removeIntake(items: { id: string; item_id: string; receipt_no: string }[]) {
+  const db = adminClient();
+  if (!items.length) return bad("That receipt isn't there any more (refresh the page).");
+  const { data: used, error } = await db
+    .from("lot_private")
+    .select("intake_item_id, lots(lot_number, auctions!lots_auction_id_fkey(number))")
+    .in("intake_item_id", items.map(i => i.id));
+  if (error) return bad(error.message);
+  if (used?.length) {
+    const one = <T,>(x: T | T[] | null) => (Array.isArray(x) ? x[0] : x);
+    const where = used.map(u => {
+      const lot = one(u.lots as { lot_number: number; auctions: unknown } | { lot_number: number; auctions: unknown }[] | null);
+      const a = one((lot?.auctions || null) as { number: number } | { number: number }[] | null);
+      const item = items.find(i => i.id === u.intake_item_id);
+      return `${item?.item_id || "a watch"} is lot ${a?.number ?? "?"}-${String(lot?.lot_number ?? "?").padStart(2, "0")}`;
+    });
+    return bad(`${where.join("; ")}. Delete ${used.length === 1 ? "that lot" : "those lots"} first (Lots › Delete; a lot with a result or bids can't be deleted), then try again.`);
+  }
+  const { error: e2 } = await db.from("intake_items").delete().in("id", items.map(i => i.id));
+  if (e2) return bad(e2.message);
+  const receipts = [...new Set(items.map(i => i.receipt_no))];
+  // a receipt with no watches left: forget that it was sent
+  for (const r of receipts) {
+    const { data: left } = await db.from("intake_items").select("id").eq("receipt_no", r).limit(1);
+    if (!left?.length) await db.from("sent_log").delete().eq("ref", r);
+  }
+  refresh();
+  return ok(items.length === 1 ? `${items[0].item_id} removed from receipt ${items[0].receipt_no}.` : `Receipt ${receipts.join(", ")} deleted (${items.length} watches).`);
+}
+
+export async function deleteIntakeReceipt(receiptNo: string) {
+  return guard(async () => {
+    const { data, error } = await adminClient().from("intake_items").select("id, item_id, receipt_no").eq("receipt_no", str(receiptNo, 40).toUpperCase());
+    if (error) return bad(error.message);
+    return removeIntake(data || []);
+  }, true);
+}
+
+export async function deleteIntakeItem(id: string) {
+  return guard(async () => {
+    const { data, error } = await adminClient().from("intake_items").select("id, item_id, receipt_no").eq("id", id);
+    if (error) return bad(error.message);
+    return removeIntake(data || []);
+  }, true);
 }
 
 /** A seller hands over watches: one receipt (CR-0001), one row per watch (CR-0001-01…). */

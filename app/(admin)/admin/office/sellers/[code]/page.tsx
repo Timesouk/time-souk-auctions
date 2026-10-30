@@ -165,7 +165,10 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
       {admin && !x.demo ? (
         <section className="panel-card">
           <span className="k">Delete this seller</span>
-          <p className="fine">Added by mistake? Only a seller with no lots, intake receipts, payments from buyers or settlements can be deleted. Admins only.</p>
+          <p className="fine">
+            Added by mistake? Only a seller with no lots, intake receipts, payments from buyers or settlements can be deleted. Admins only.
+            {receipts.length ? <> Delete their receipt{receipts.length === 1 ? "" : "s"} first: {receipts.map((r, i) => <span key={r}>{i ? ", " : ""}<Link href={`/admin/office/intake/${r}`}>{r}</Link></span>)} (at the bottom of the receipt).</> : null}
+          </p>
           <div className="row">
             <ConfirmRun label={`Delete seller ${x.code}`} className="btn danger" ask={`Are you sure you want to delete seller ${x.code} · ${x.name}?\n\nThis can't be undone.`} run={deleteSeller.bind(null, x.id)} then="/admin/office/sellers" />
           </div>
