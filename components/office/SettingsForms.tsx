@@ -15,7 +15,7 @@ const GROUPS: [string, Field[]][] = [
   ]],
   ["Bank (printed in How to pay)", [["bank_name", "Bank name"], ["bank_account", "Account name"], ["bank_iban", "IBAN"], ["bank_swift", "SWIFT / BIC"]]],
   ["Auction rules", [
-    ["fee_pct", "Seller fee % (default)", "num"], ["fee_fixed", "Seller fixed fee per sold lot (AED)", "num"], ["fee_min", "Minimum seller fee (AED)", "num"],
+    ["fee_pct", "Seller fee % (default)", "num", "Used when there's no fee scale (above)."], ["fee_fixed", "Seller fixed fee per sold lot (AED)", "num", "Added to the %, when there's no fee scale."], ["fee_min", "Minimum seller fee (AED)", "num", "Applies to the scale too."],
     ["vat_fee_pct", "VAT on seller fee %", "num"], ["vat_sales_pct", "VAT on buyer invoices %", "num"], ["hours_to_pay", "Hours to pay", "num"],
     ["pay_clock", "Payment clock starts at (auction day)", "time"], ["uae_fee", "Standard UAE delivery (AED)", "num"], ["cod_fee", "Cash on delivery charge (AED)", "num"],
     ["card_fee_pct", "Card payment fee %", "num"], ["cash_alert", "Cash payment alert (AED)", "num"], ["lot_target", "Lots per auction (target)", "num"],

@@ -5,6 +5,7 @@ import { pctText } from "@/lib/office/messages";
 import { SetupNeeded } from "@/components/office/bits";
 import { NewSeller } from "@/components/office/forms2";
 import { sellerNowAndLater } from "@/lib/office/seller-account";
+import { feeRule } from "@/lib/office/fees";
 
 export const dynamic = "force-dynamic";
 
@@ -16,13 +17,18 @@ export default async function OfficeSellers() {
   const owed = o.sellers.filter(x => !x.demo).reduce((t, x) => t + Math.max(0, x.owed), 0);
   const nowOf = new Map(o.sellers.filter(x => x.kind !== "own").map(x => [x.id, sellerNowAndLater(o, x.id).now]));
   const dueNow = o.sellers.filter(x => !x.demo).reduce((t, x) => t + Math.max(0, nowOf.get(x.id) || 0), 0);
+  const feeShort = (x: (typeof list)[number]) => {
+    const r = feeRule(null, x, s);
+    if (r.scale) return r.from === "seller scale" ? "own scale" : "standard scale";
+    return `${pctText(r.pct / 100)}${r.fixed ? ` + ${amt(r.fixed)}` : ""}`;
+  };
   const bal = (n: number) => (n > 0.005 ? <b>{amt(n)}</b> : n < -0.005 ? <b className="warn-ink" title="Buyers paid this seller directly more than their share">owes us {amt(-n)}</b> : "0");
   return (
     <div className="stack" style={{ gap: 16 }}>
       <div className="adm-head">
         <div>
           <h1 className="disp">Sellers</h1>
-          <p className="fine">Consignors and your own stock (TS). Default fee: {pctText(s.fee_pct / 100)}{s.fee_fixed ? ` + AED ${amt(s.fee_fixed)} per sold lot` : ""}. Due to sellers now (their buyers have paid): {aed(dueNow)} · once every buyer has paid: {aed(owed)}.</p>
+          <p className="fine">Consignors and your own stock (TS). Standard fee: {s.fee_scale.length ? <Link href="/admin/office/settings#fee-scale">fee scale by sold price</Link> : <>{pctText(s.fee_pct / 100)}{s.fee_fixed ? ` + AED ${amt(s.fee_fixed)} per sold lot` : ""}</>}. Due to sellers now (their buyers have paid): {aed(dueNow)} · once every buyer has paid: {aed(owed)}.</p>
         </div>
         <div className="row">
           <Link className="btn sm pri" href="/admin/office/sellers/payouts">Pay a whole auction</Link>
@@ -43,7 +49,7 @@ export default async function OfficeSellers() {
                 <td>{x.name}</td>
                 <td>{x.kind === "own" ? "Own stock" : "Consignment"}{x.demo ? <small className="sub">demo</small> : null}</td>
                 <td className="mono nowrap">{x.phone}</td>
-                <td className="nowrap">{x.kind === "own" ? "" : `${pctText((x.fee_pct ?? s.fee_pct) / 100)}${(x.fee_fixed ?? s.fee_fixed) ? ` + ${amt(x.fee_fixed ?? s.fee_fixed)}` : ""}`}</td>
+                <td className="nowrap">{x.kind === "own" ? "" : feeShort(x)}</td>
                 <td className="n">{x.lotsEntered}</td>
                 <td className="n">{x.lotsSold}</td>
                 <td className="n">{amt(x.hammer)}</td>

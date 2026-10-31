@@ -1,5 +1,6 @@
 // The WhatsApp wording (English + Arabic), as on the workbook's Messages sheet, and the messages built from it.
 // Staff can change any wording in Back office › Settings; their versions are stored in office_messages.
+import { scaleText, type FeeBand } from "./fees";
 import { COD, UAE, type MessageOverrides, type OfficeSettings } from "./types";
 import { aed, amt, cardRate, r2, type InvoiceView, type LotView } from "./engine";
 
@@ -356,7 +357,7 @@ export type ReceiptItem = { brand: string; model: string; reference: string; ser
 /** The consignment intake receipt, for the seller. */
 export function receiptMessage(
   w: Wording,
-  p: { code: Code; receipt: string; date: string | null; name: string; items: ReceiptItem[]; feePct: number; feeFixed: number; url?: string }
+  p: { code: Code; receipt: string; date: string | null; name: string; items: ReceiptItem[]; feePct: number; feeFixed: number; feeScale?: FeeBand[] | null; url?: string }
 ) {
   const items = p.items.filter(i => `${i.brand}${i.model}${i.reference}${i.serial}`.trim());
   const head = (l: L) => {
@@ -372,7 +373,10 @@ export function receiptMessage(
     s += "  ·  " + ((i.reserve || 0) > 0 ? fill(w.t("ir_reserve", l), { amount: amt(i.reserve) }) : w.t("ir_noreserve", l));
     return s;
   };
-  const fee = (l: L) => (p.feePct > 0 || p.feeFixed > 0 ? "\n\n" + fill(w.t("ir_sellerfee", l), { fee: sellerFeeText(w, l, p.feePct, p.feeFixed) }) : "");
+  const fee = (l: L) =>
+    p.feeScale?.length
+      ? "\n\n" + fill(w.t("ir_sellerfee", l), { fee: scaleText(p.feeScale, l) })
+      : p.feePct > 0 || p.feeFixed > 0 ? "\n\n" + fill(w.t("ir_sellerfee", l), { fee: sellerFeeText(w, l, p.feePct, p.feeFixed) }) : "";
   const end = (l: L) => (p.url ? "\n\n" + fill(w.t("ir_view", l), { url: p.url }) + "\n" : "\n\n") + w.t("ir_end", l);
   const full = (l: L) => head(l) + "\n" + fill(w.t("ir_count", l), { count: items.length }) + items.map((it, i) => "\n" + line(l, i + 1, it)).join("") + fee(l) + end(l);
   const short = (l: L) => head(l) + "\n" + fill(w.t("ir_summary", l), { count: items.length }) + fee(l) + end(l);

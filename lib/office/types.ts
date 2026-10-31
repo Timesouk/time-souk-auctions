@@ -1,4 +1,5 @@
 // Back office (the auction workbook, inside the admin): the stored records, as they come from the database.
+import type { FeeBand } from "./fees";
 
 export type Lang3 = "both" | "en" | "ar";
 
@@ -22,6 +23,10 @@ export type OfficeSettings = {
   fee_pct: number;
   fee_fixed: number;
   fee_min: number;
+  /** The standard fee scale by sold price (empty = the % and fixed fee above). Needs 0010. */
+  fee_scale: FeeBand[];
+  /** The first auction date the standard scale applies to (earlier auctions keep the % and fixed fee). */
+  fee_scale_from: string | null;
   vat_fee_pct: number;
   vat_sales_pct: number;
   hours_to_pay: number;
@@ -60,7 +65,7 @@ export const DEFAULT_SETTINGS: OfficeSettings = {
   trading_name: "The Time Souk", legal_name: "The TS for Online Selling", licence: "", address: "Dubai, United Arab Emirates",
   phone: "+971 50 696 9080", email: "", instagram: "@thetimesouk", website: "timesoukauctions.com", trn: "",
   brand_name: "DXB Watch × The Time Souk", bank_name: "", bank_account: "", bank_iban: "", bank_swift: "",
-  fee_pct: 7.5, fee_fixed: 0, fee_min: 0, vat_fee_pct: 0, vat_sales_pct: 0, hours_to_pay: 48, pay_clock: "21:00",
+  fee_pct: 7.5, fee_fixed: 0, fee_min: 0, fee_scale: [], fee_scale_from: null, vat_fee_pct: 0, vat_sales_pct: 0, hours_to_pay: 48, pay_clock: "21:00",
   uae_fee: 30, cod_fee: 10, card_fee_pct: 3, card_fee_methods: ["Card link (Ziina)"], cash_alert: 55000, remind_gap_hours: 12,
   lot_target: 100, wa_lang: "both", wa_mode: "app", link_mode: "ask", inv_note: "No buyer's premium: you pay the hammer price.",
   inv_terms: "", seller_terms: "", intake_terms: "", slip_note: "Your invoice follows on WhatsApp. Thank you!",
@@ -199,6 +204,10 @@ export type Seller = {
   id_checked: string;
   fee_pct: number | null;
   fee_fixed: number | null;
+  /** This seller's own fee scale by sold price (null or empty = not used). Needs 0010. */
+  fee_scale?: FeeBand[] | null;
+  /** The first auction date the seller's scale applies to. */
+  fee_scale_from?: string | null;
   bank: string;
   iban: string;
   notes: string;
@@ -316,6 +325,8 @@ export type OfficeData = {
   settlements?: SellerSettlement[];
   /** True when the database doesn't have seller settlements yet (0009 not run). */
   needs0009?: boolean;
+  /** 0010 (fee scales) hasn't been run yet. */
+  needs0010?: boolean;
   messages: MessageOverrides;
   /** "Now" in milliseconds, so every page computes against the same clock. */
   now: number;

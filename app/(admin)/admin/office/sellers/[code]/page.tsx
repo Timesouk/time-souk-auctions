@@ -9,6 +9,8 @@ import { ConfirmRun } from "@/components/office/ConfirmRun";
 import { deleteSeller, deleteSettlement } from "../../actions2";
 import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
+import { feeRule, ruleText } from "@/lib/office/fees";
+import { FeeScaleEditor } from "@/components/office/FeeScale";
 import { auctionFigures, sellerNowAndLater } from "@/lib/office/seller-account";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +35,7 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
   const settlements = (o.data.settlements || []).filter(s => s.seller_id === x.id).sort((a, b) => b.entry_date.localeCompare(a.entry_date));
   const directs = o.ledger.filter(e => e.paid_to_seller_id === x.id && e.kind === "Payment").slice().reverse();
   const consign = x.kind !== "own";
+  const feeNow = feeRule(null, x, o.data.settings);
   const nl = sellerNowAndLater(o, x.id);
   return (
     <div className="stack" style={{ gap: 18 }}>
@@ -153,6 +156,24 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
           </div>
         ) : <p className="fine">No lots yet.</p>}
       </section>
+      {consign ? (
+        <section className="panel-card" id="fee">
+          <span className="k">Fee · {feeNow.scale ? (feeNow.from === "seller scale" ? "their own scale" : "the standard scale") : feeNow.from === "seller" ? "their own %" : "the standard %"}</span>
+          <p className="fine">
+            Now: {ruleText(feeNow)}. A watch with its own fee typed on it (intake or Lots › Lot details) keeps that.
+            {" "}Their own % or fixed fee goes under Details below; for a fee that depends on the sold price, give them their own scale here
+            {feeNow.from === "scale" ? " (otherwise they follow the standard scale in Settings)" : ""}.
+          </p>
+          <FeeScaleEditor
+            value={x.fee_scale || []}
+            from={x.fee_scale_from}
+            sellerId={x.id}
+            fallback={x.fee_pct != null || x.fee_fixed != null ? `their own ${x.fee_pct ?? o.data.settings.fee_pct}%${(x.fee_fixed ?? o.data.settings.fee_fixed) ? ` + AED ${x.fee_fixed ?? o.data.settings.fee_fixed}` : ""} (Details)` : o.data.settings.fee_scale.length ? "the standard scale in Settings" : `the standard ${o.data.settings.fee_pct}%`}
+            feeMin={o.data.settings.fee_min}
+            needs0010={o.data.needs0010}
+          />
+        </section>
+      ) : null}
       <section className="panel-card">
         <span className="k">Details</span>
         <SellerForm
@@ -165,7 +186,10 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
       {admin && !x.demo ? (
         <section className="panel-card">
           <span className="k">Delete this seller</span>
-          <p className="fine">Added by mistake? Only a seller with no lots, intake receipts, payments from buyers or settlements can be deleted. Admins only.</p>
+          <p className="fine">
+            Added by mistake? Only a seller with no lots, intake receipts, payments from buyers or settlements can be deleted. Admins only.
+            {receipts.length ? <> Delete their receipt{receipts.length === 1 ? "" : "s"} first: {receipts.map((r, i) => <span key={r}>{i ? ", " : ""}<Link href={`/admin/office/intake/${r}`}>{r}</Link></span>)} (at the bottom of the receipt).</> : null}
+          </p>
           <div className="row">
             <ConfirmRun label={`Delete seller ${x.code}`} className="btn danger" ask={`Are you sure you want to delete seller ${x.code} · ${x.name}?\n\nThis can't be undone.`} run={deleteSeller.bind(null, x.id)} then="/admin/office/sellers" />
           </div>

@@ -1,12 +1,10 @@
 // Seller paperwork, printed with both logos: the consignment intake receipt and the listing / statement per auction.
 import { amt, type IntakeView, type LotView, type Office } from "@/lib/office/engine";
 import { auctionFigures, oursText, sellerAuctions, type AuctionFigures, type SellerAccount } from "@/lib/office/seller-account";
-import { dateText, pctText } from "@/lib/office/messages";
+import { dateText } from "@/lib/office/messages";
 import type { OAuction, OfficeSettings, Seller } from "@/lib/office/types";
 import { DocHead } from "./DocHead";
-
-const feeText = (pct: number | null | undefined, fixed: number | null | undefined) =>
-  [pct ? `${pctText(pct / 100)} of the hammer price` : "", fixed ? `AED ${amt(fixed)} per item sold` : ""].filter(Boolean).join(" + ") || "none";
+import { feeRule, ruleText } from "@/lib/office/fees";
 
 function Signatures({ left, right }: { left: string; right: string }) {
   return (
@@ -20,9 +18,10 @@ function Signatures({ left, right }: { left: string; right: string }) {
 export function ReceiptDoc({ receipt, items, seller, s }: { receipt: string; items: IntakeView[]; seller: Seller | undefined; s: OfficeSettings }) {
   const first = items[0];
   const reserves = items.reduce((t, i) => t + (i.reserve || 0), 0);
-  const pct = first?.fee_pct ?? seller?.fee_pct ?? s.fee_pct;
-  const fixed = first?.fee_fixed ?? seller?.fee_fixed ?? s.fee_fixed;
-  const mixed = items.some(i => (i.fee_pct ?? seller?.fee_pct ?? s.fee_pct) !== pct || (i.fee_fixed ?? seller?.fee_fixed ?? s.fee_fixed) !== fixed);
+  // each watch's fee: its own, else the seller's (scale or %), else the standard (scale or %)
+  const itemFee = (i: IntakeView) => ruleText(feeRule({ seller_fee: i.fee_pct, fee_fixed: i.fee_fixed }, seller, s));
+  const feeAll = first ? itemFee(first) : ruleText(feeRule(null, seller, s));
+  const mixed = items.some(i => itemFee(i) !== feeAll);
   return (
     <article className="doc">
       <DocHead s={s} />
@@ -53,7 +52,7 @@ export function ReceiptDoc({ receipt, items, seller, s }: { receipt: string; ite
                 {i.reference ? <small> · ref {i.reference}</small> : null}
                 {i.year ? <small> · {i.year}</small> : null}
                 {i.notes ? <small className="sub">{i.notes}</small> : null}
-                {mixed && (i.fee_pct != null || i.fee_fixed != null) ? <small className="sub">Fee: {feeText(i.fee_pct ?? seller?.fee_pct ?? s.fee_pct, i.fee_fixed ?? seller?.fee_fixed ?? s.fee_fixed)}</small> : null}
+                {mixed && (i.fee_pct != null || i.fee_fixed != null) ? <small className="sub">Fee: {itemFee(i)}</small> : null}
               </td>
               <td className="mono">{i.serial}</td>
               <td>{i.box_papers}</td>
@@ -66,7 +65,7 @@ export function ReceiptDoc({ receipt, items, seller, s }: { receipt: string; ite
       </table>
       <div className="doc-foot">
         <div className="doc-pay">
-          <p><b>Seller fee:</b> {mixed ? "as shown per item" : feeText(pct, fixed)}, charged only when an item sells and never more than its hammer price.</p>
+          <p><b>Seller fee:</b> {mixed ? `${feeAll}; some items as shown` : feeAll}, charged only when an item sells and never more than its hammer price.</p>
           <p className="fine">Each watch stays the seller&apos;s property until it sells. Reserves can be changed before the auction by agreement.</p>
         </div>
         <table className="doc-totals">
@@ -139,7 +138,7 @@ export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
         <dl>
           <dt>Auction</dt><dd>{auction.number} · {dateText(auction.sale_date, "EN")}</dd>
           <dt>Seller ID</dt><dd className="mono">{seller.code}</dd>
-          <dt>Seller fee</dt><dd>{own ? "Own stock: no fee" : feeText(seller.fee_pct ?? s.fee_pct, seller.fee_fixed ?? s.fee_fixed)}</dd>
+          <dt>Seller fee</dt><dd style={{ maxWidth: 360 }}>{own ? "Own stock: no fee" : ruleText(feeRule(null, seller, s, auction.sale_date))}</dd>
           {!listing ? <><dt>As of</dt><dd>{dateText(asOf, "EN")}</dd></> : null}
         </dl>
       </div>

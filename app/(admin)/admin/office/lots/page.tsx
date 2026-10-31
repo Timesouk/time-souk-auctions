@@ -53,7 +53,11 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
           brand: l.brand, model: l.model, reference: l.reference, year: l.year, box_papers: l.box_papers, condition: l.condition, serial: l.serial, seller: l.seller?.code || "",
           start_price: num(l.start_price), reserve: num(l.reserve), cost: num(l.cost), fee_pct: num(l.seller_fee), fee_fixed: num(l.fee_fixed)
         },
-        info: { type: l.type, fee: l.type === "Consignment" ? `${l.feePct ?? 0}%${l.feeFixed ? ` + ${amt(l.feeFixed)}` : ""}` : "", check: l.reserveCheck }
+        info: {
+          type: l.type,
+          fee: l.type !== "Consignment" ? "" : l.feeScale && !l.sold ? "by scale" : `${l.feePct ?? 0}%${l.feeFixed ? ` + ${amt(l.feeFixed)}` : ""}${l.feeScale ? " (scale)" : ""}`,
+          check: l.reserveCheck
+        }
       };
     }
     return {
