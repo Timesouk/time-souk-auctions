@@ -203,13 +203,27 @@ test("lots can start at 0 with no estimates: first bid from AED 1, a lone max bi
   await db.query("update lots set estimate_low = 5000, estimate_high = null where id = $1", [lot]);
 });
 
-test("only one admin; staff logins are unique", async () => {
+test("several admins are allowed (0011); staff logins are unique", async () => {
   const X = await makeUser("admin2@test.ae");
   const Y = await makeUser("staffy@test.ae");
-  const admins = Number((await one("select count(*) n from profiles where role = 'admin'")).n);
-  if (admins === 0) await db.query("update profiles set role = 'admin' where id = $1", [X.id]);
-  await expectError(db.query("update profiles set role = 'admin' where id = $1", [Y.id]), "duplicate key value");
+  await db.query("update profiles set role = 'admin' where id = $1", [X.id]);
+  await db.query("update profiles set role = 'admin' where id = $1", [Y.id]);
+  assert.ok(Number((await one("select count(*) n from profiles where role = 'admin'")).n) >= 2);
+  // admins are staff for every staff-only rule
+  await db.query("select set_config('test.uid', $1, false)", [Y.id]);
+  await db.exec("set role authenticated");
+  try {
+    assert.equal((await one("select public.is_staff() ok")).ok, true);
+  } finally {
+    await db.exec("reset role");
+    await db.query("select set_config('test.uid', '', false)");
+  }
+  // 0011 can be run again
+  const sql = readFileSync(new URL("0011_several_admins.sql", migrationsDir), "utf8").replace(/^notify pgrst.*$/m, "");
+  await db.exec(sql);
+  await db.exec(sql);
   await db.query("update profiles set role = 'staff', staff_login = 'ahmed' where id = $1", [X.id]);
+  await db.query("update profiles set role = 'staff' where id = $1", [Y.id]);
   await expectError(db.query("update profiles set staff_login = 'ahmed' where id = $1", [Y.id]), "duplicate key value");
 });
 

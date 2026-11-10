@@ -44,15 +44,16 @@ These involve approvals by other companies. Start them now and carry on with the
 3. Do the same with `supabase/migrations/0002_timers.sql` (adjustable timers). Run it **after** 0001.
    Then `supabase/migrations/0003_any_amount_cod_address.sql` (bid any amount, cash on delivery, delivery addresses). Run it **after** 0002.
    Then `supabase/migrations/0004_cod_uae_only.sql` (cash on delivery for UAE deliveries only). Run it **after** 0003.
-   Then `supabase/migrations/0005_optional_estimates_zero_start.sql` (optional estimates, AED 0 starting bids, staff logins, one admin). Run it **after** 0004.
+   Then `supabase/migrations/0005_optional_estimates_zero_start.sql` (optional estimates, AED 0 starting bids, staff logins). Run it **after** 0004.
    Then `supabase/migrations/0006_back_office.sql` (the back office: buyers, sellers, intake, consolidated invoices, payments, card links). Run it **after** 0005.
    Then `supabase/migrations/0007_accounting.sql` (accounting: chart of accounts, entries, reconciliation, closing the books). Run it **after** 0006.
    Then `supabase/migrations/0008_office_extras.sql` (Instagram-only auctions, the demo auction for training, buyers who pay the consignor directly). Run it **after** 0007.
    Then `supabase/migrations/0009_seller_settlements.sql` (settling a consignor's account outside a payout). Run it **after** 0008.
    Then `supabase/migrations/0010_fee_scales.sql` (seller fee scales by sold price). Run it **after** 0009.
+   Then `supabase/migrations/0011_several_admins.sql` (lets you give staff full admin access). Run it **after** 0010.
 4. Check **Table Editor**: you should see tables such as `auctions`, `lots`, `bids`, `invoices`, `profiles`.
 
-> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0010 are safe to run again. If Supabase shows **Potential issues detected** before running one, that's expected: the "destructive" lines only remove an old rule and add it straight back, and no data is deleted. Press **Run and enable RLS**.
+> Run 0001 **only once** per project. If it shows an error, don't run it again on top: copy the error message (not any keys) and send it to whoever maintains the code. 0002 to 0011 are safe to run again. If Supabase shows **Potential issues detected** before running one, that's expected: the "destructive" lines only remove an old rule and add it straight back, and no data is deleted. Press **Run and enable RLS**.
 
 ### 1.3 Copy the API keys into Vercel later
 You'll need these three values in Part 3. Find them in **Project Settings → API Keys** (and **Project Settings → Data API** for the URL):
@@ -264,7 +265,9 @@ Then in the Tamara Partner Portal: **Settings → General Settings → Webhooks 
 
 **Adding staff:** **Admin → Staff → Create a staff login**: their name, a staff ID (e.g. `ahmed`) and a password (**Make one** creates a strong one). Send them the details shown (the password is shown only once). They sign in at `https://www.yourdomain.com/admin` with the staff ID and password; no email or phone code. Forgotten password: type a new one on the Staff page and **Save password**. Someone leaving: **Turn off access**.
 
-Staff can run the live console and manage lots, bidders and payments. Only you (the one admin) can change **Settings**, manage **Staff**, change roles and reset auctions. The site allows only one admin.
+Staff run the live console and the back office day to day: lots, bidders, invoices, payments, payouts, intake and dispatch. **Admins** can also change **Settings** and fees, manage **Staff**, change roles, delete auctions and records, import the workbook, close the books and reset auctions.
+
+**Giving someone full admin access** (needs `0011_several_admins.sql`): tick **Full admin access** when creating their login, or press **Make admin (full access)** next to an existing staff member on the Staff page (tap again to confirm). **Make staff (no admin access)** takes it back. Admins can change each other's access but never their own, so there's always at least one admin. Give it only to people you trust with money and settings.
 
 ---
 
@@ -385,7 +388,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | Problem | Fix |
 |---|---|
 | Site still shows sample watches | Supabase variables missing, or you didn't redeploy after adding them. |
-| Site shows an error after connecting Supabase | Check all ten database files ran, in order: `0001` to `0010` (Part 1.2). |
+| Site shows an error after connecting Supabase | Check all eleven database files ran, in order: `0001` to `0011` (Part 1.2). |
 | Can't change the timer on a lot | Its timer is running. Sudden death: stop it, or let it end and Reopen. |
 | No email code | Check Resend → **Logs**. Check Supabase SMTP settings (Part 2.3), and that the templates contain `{{ .Token }}`. Look in spam. |
 | Email code says "invalid" | Codes expire after 10 minutes and only the newest code works. Ask for a new one. |
@@ -413,7 +416,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 
 ### 13.1 Once
 
-1. Run `supabase/migrations/0006_back_office.sql`, `0007_accounting.sql`, `0008_office_extras.sql`, `0009_seller_settlements.sql` and `0010_fee_scales.sql` (Part 1.2) if you haven't.
+1. Run `supabase/migrations/0006_back_office.sql`, `0007_accounting.sql`, `0008_office_extras.sql`, `0009_seller_settlements.sql`, `0010_fee_scales.sql` and `0011_several_admins.sql` (Part 1.2) if you haven't.
 2. **Back office → Settings** (admin): check the company and bank details, the co-branded name (**DXB Watch × The Time Souk**), fees, hours to pay, delivery and cash on delivery charges, the card fee, the WhatsApp language, and the text printed on documents. Have a lawyer review the intake declaration and seller declaration.
 3. **Back office → Import** (admin): save the workbook in Excel, then choose the `.xlsm` file. The page shows what's in it and what the invoices add up to per auction: compare with the Auctions sheet in Excel, then press **Import into the back office**. Auctions not yet on the website arrive as **Instagram only** (real auctions, not shown on the website). The Ziina key on the workbook's Settings sheet is never read. You can import again later with a newer copy: records are matched and updated, not doubled.
 4. Card links: the back office uses the website's Ziina key (`ZIINA_API_KEY`, Part 5.1). Without it, paste links made in the Ziina app on each invoice's page.

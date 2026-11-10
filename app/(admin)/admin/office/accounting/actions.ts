@@ -46,7 +46,7 @@ const ADMIN_KINDS: ManualKind[] = ["owner", "opening", "journal"];
 
 export async function postEntry(input: EntryInput) {
   return guard(async staff => {
-    if (ADMIN_KINDS.includes(input.kind) && staff.role !== "admin") return bad("Only the admin can record this kind of entry.");
+    if (ADMIN_KINDS.includes(input.kind) && staff.role !== "admin") return bad("Only an admin can record this kind of entry.");
     const date = ymd(input.entry_date);
     if (!date) return bad("Choose the date.");
     const lines = (input.lines || [])

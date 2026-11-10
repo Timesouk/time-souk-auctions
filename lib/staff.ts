@@ -22,7 +22,7 @@ export async function requireStaff(): Promise<Staff> {
 
 export async function requireAdmin(): Promise<Staff> {
   const s = await requireStaff();
-  if (s.role !== "admin") throw new Error("Only the admin can do this.");
+  if (s.role !== "admin") throw new Error("Only an admin can do this.");
   return s;
 }
 

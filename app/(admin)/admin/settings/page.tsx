@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   if (IS_PREVIEW) return <p className="alert info">Connect Supabase to change settings.</p>;
-  if ((await getStaff())?.role !== "admin") return <p className="alert">Only the admin can change settings.</p>;
+  if ((await getStaff())?.role !== "admin") return <p className="alert">Only an admin can change settings.</p>;
   const db = adminClient();
   const [{ data: s }, { data: p }] = await Promise.all([
     db.from("settings").select("*").eq("id", 1).single(),

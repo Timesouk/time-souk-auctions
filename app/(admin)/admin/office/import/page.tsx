@@ -10,7 +10,7 @@ export const maxDuration = 60;
 
 export default async function OfficeImport() {
   const staff = IS_PREVIEW ? null : await getStaff();
-  if (!IS_PREVIEW && staff?.role !== "admin") return <p className="alert">Only the admin can import the workbook.</p>;
+  if (!IS_PREVIEW && staff?.role !== "admin") return <p className="alert">Only an admin can import the workbook.</p>;
   const data = await loadOfficeData().catch(() => null);
   return (
     <div className="stack" style={{ gap: 16, maxWidth: 980 }}>
