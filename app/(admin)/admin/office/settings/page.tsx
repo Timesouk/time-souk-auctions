@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function OfficeSettingsPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const sp = await searchParams;
   const staff = IS_PREVIEW ? null : await getStaff();
-  if (!IS_PREVIEW && staff?.role !== "admin") return <p className="alert">Only the admin can change the back office settings.</p>;
+  if (!IS_PREVIEW && staff?.role !== "admin") return <p className="alert">Only an admin can change the back office settings.</p>;
   const data = await loadOfficeData().catch((e: Error) => e);
   if (data instanceof Error) return <SetupNeeded error={data.message} />;
   const tab = sp.tab === "messages" ? "messages" : sp.tab === "demo" ? "demo" : "settings";

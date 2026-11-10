@@ -213,15 +213,7 @@ end $$;
 alter table public.profiles add column if not exists staff_login text;
 create unique index if not exists profiles_staff_login_uq on public.profiles (staff_login) where staff_login is not null;
 
--- Only one admin. (Skipped if there is more than one today: change the others to staff first, then run this again.)
-do $$
-begin
-  if (select count(*) from public.profiles where role = 'admin') <= 1 then
-    create unique index if not exists profiles_one_admin_uq on public.profiles ((true)) where role = 'admin';
-  else
-    raise notice 'More than one admin: change the others to staff in the admin (Staff page), then run this script again.';
-  end if;
-end $$;
+-- (This file used to allow only one admin. Several admins are allowed now: see 0011_several_admins.sql.)
 
 revoke all on function public._apply_bid(uuid, uuid, text, int, int, text, text, uuid) from public, anon, authenticated;
 grant execute on function public._apply_bid(uuid, uuid, text, int, int, text, text, uuid) to service_role;

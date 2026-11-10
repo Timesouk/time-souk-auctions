@@ -420,11 +420,16 @@ export async function updateBidder(profileId: string, patch: { instagram?: strin
     const row: Record<string, unknown> = {};
     if (patch.instagram !== undefined) row.instagram = normIg(patch.instagram);
     if (patch.instagram_confirmed !== undefined) row.instagram_confirmed = patch.instagram_confirmed;
+    if (patch.suspended !== undefined || patch.role !== undefined) {
+      const { data: target } = await db.from("profiles").select("role").eq("id", profileId).maybeSingle();
+      const isStaffAccount = target?.role === "staff" || target?.role === "admin";
+      if (profileId === me.id) return bad(patch.role !== undefined ? "You can’t change your own role." : "You can’t suspend yourself.");
+      if (patch.suspended !== undefined && isStaffAccount && me.role !== "admin") return bad("Only an admin can suspend a staff or admin account.");
+    }
     if (patch.suspended !== undefined) row.suspended = patch.suspended;
     if (patch.role !== undefined) {
-      if (me.role !== "admin") return bad("Only the admin can change roles.");
-      if (profileId === me.id) return bad("You can’t change your own role.");
-      if (patch.role === "admin") return bad("There is only one admin. Make them staff instead.");
+      if (me.role !== "admin") return bad("Only an admin can change roles.");
+      if (!["bidder", "staff", "admin"].includes(patch.role)) return bad("Unknown role.");
       row.role = patch.role;
     }
     if (patch.phone !== undefined) {
@@ -529,9 +534,10 @@ export async function setConsignmentStatus(id: string, status: "new" | "contacte
 // ─── staff accounts (admin only) ───
 
 /** Creates a staff login: they sign in to the admin with this staff ID and password (no email or phone code). */
-export async function createStaffAccount(input: { name: string; login: string; password: string }) {
+export async function createStaffAccount(input: { name: string; login: string; password: string; admin?: boolean }) {
   return guard(async () => {
     await requireAdmin();
+    const role = input.admin ? "admin" : "staff";
     const name = str(input.name, 120);
     const login = normStaffLogin(input.login);
     const password = String(input.password || "");
@@ -547,14 +553,14 @@ export async function createStaffAccount(input: { name: string; login: string; p
     });
     if (error || !data.user) return bad(error?.message || "Couldn’t create the account.");
     const { error: e2 } = await db.from("profiles")
-      .update({ role: "staff", staff_login: login, full_name: name, terms_accepted_at: new Date().toISOString() })
+      .update({ role, staff_login: login, full_name: name, terms_accepted_at: new Date().toISOString() })
       .eq("id", data.user.id);
     if (e2) {
       await db.auth.admin.deleteUser(data.user.id);
-      return bad(e2.message);
+      return bad(/profiles_one_admin_uq/.test(e2.message) ? "Run supabase/migrations/0011_several_admins.sql in Supabase first: until then there can only be one admin." : e2.message);
     }
     revalidatePath("/admin/staff");
-    return ok(`Login created for ${name}.`, data.user.id);
+    return ok(`Login created for ${name}${role === "admin" ? ", with full admin access" : ""}.`, data.user.id);
   });
 }
 
@@ -585,14 +591,29 @@ export async function setStaffActive(profileId: string, active: boolean) {
   });
 }
 
-/** Removes the staff (or a second admin's) role from someone who signs in with an email code; they stay a bidder. */
-export async function setStaffRole(profileId: string, role: "staff" | "bidder") {
+/**
+ * Gives a staff member full admin access, takes it away (back to staff), or removes staff access altogether (back to
+ * a bidder). Admins only; nobody changes their own role, so there's always at least one admin.
+ */
+export async function setStaffRole(profileId: string, role: "admin" | "staff" | "bidder") {
   return guard(async () => {
     const me = await requireAdmin();
-    if (profileId === me.id) return bad("You can’t change your own role.");
-    const { error } = await adminClient().from("profiles").update({ role }).eq("id", profileId);
+    if (profileId === me.id) return bad("You can’t change your own role. Ask another admin.");
+    if (!["admin", "staff", "bidder"].includes(role)) return bad("Unknown role.");
+    const db = adminClient();
+    const { data: target } = await db.from("profiles").select("role, suspended, full_name").eq("id", profileId).maybeSingle();
+    if (!target) return bad("That account isn’t there any more (refresh the page).");
+    if (role === "admin" && target.role !== "staff") return bad("Make them staff first, then admin.");
+    if (role === "admin" && target.suspended) return bad("Their access is turned off. Turn it back on first.");
+    const { error } = await db.from("profiles").update({ role }).eq("id", profileId);
     revalidatePath("/admin/staff");
-    return error ? bad(error.message) : ok(role === "staff" ? "Now staff (not admin)." : "Staff access removed. They can still bid as a normal bidder.");
+    if (error) return bad(/profiles_one_admin_uq/.test(error.message) ? "Run supabase/migrations/0011_several_admins.sql in Supabase first: until then there can only be one admin." : error.message);
+    const who = target.full_name || "They";
+    return ok(
+      role === "admin" ? `${who} now has full admin access (settings, staff, accounting, deleting). They see it next time a page loads.`
+        : role === "staff" ? `${who} is staff again (no admin access).`
+          : "Staff access removed. They can still bid as a normal bidder."
+    );
   });
 }
 

@@ -51,9 +51,18 @@ export function BidderRow({ b, canRole }: { b: BidderRowData; canRole: boolean }
                 <button className="btn sm" type="button" disabled={pending} onClick={() => run(() => updateBidder(b.id, { id_checked: !b.id_checked }))}>{b.id_checked ? "Unmark ID checked" : "Mark ID checked"}</button>
                 <button className={`btn sm${b.suspended ? "" : " danger"}`} type="button" disabled={pending} onClick={() => run(() => updateBidder(b.id, { suspended: !b.suspended }))}>{b.suspended ? "Unsuspend" : "Suspend"}</button>
                 {canRole && b.role !== "admin" ? (
-                  <select value={b.role} onChange={e => run(() => updateBidder(b.id, { role: e.target.value as "bidder" | "staff" }))} aria-label="Role">
+                  <select
+                    value={b.role}
+                    onChange={e => {
+                      const role = e.target.value as "bidder" | "staff" | "admin";
+                      if (role === "admin" && !window.confirm("Give them full admin access (settings, staff, money, deleting)?")) return;
+                      run(() => updateBidder(b.id, { role }));
+                    }}
+                    aria-label="Role"
+                  >
                     <option value="bidder">Bidder</option>
                     <option value="staff">Staff (signs in with email code)</option>
+                    <option value="admin">Admin, full access (signs in with email code)</option>
                   </select>
                 ) : null}
               </div>

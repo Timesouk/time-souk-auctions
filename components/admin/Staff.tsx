@@ -42,7 +42,7 @@ export function StaffSignIn({ signedInAs }: { signedInAs?: string | null }) {
         <button className="btn pri lg" type="submit" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
         {err ? <p className="alert" role="alert">{err}</p> : null}
       </form>
-      <p className="fine">Forgot your password? Ask the admin to set a new one.</p>
+      <p className="fine">Forgot your password? Ask an admin to set a new one.</p>
       <p className="fine">Admin? <Link href="/en/sign-in?next=/admin">Sign in with your email code</Link>.</p>
     </div>
   );
@@ -54,6 +54,7 @@ export function CreateStaff({ site }: { site: string }) {
   const [name, setName] = useState("");
   const [login, setLogin] = useState("");
   const [pw, setPw] = useState("");
+  const [admin, setAdmin] = useState(false);
   const [made, setMade] = useState<{ name: string; login: string; pw: string } | null>(null);
   const { pending, msg, run } = useAction();
   const note = made ? `Your Time Souk staff login\nSign in at: ${site}/admin\nStaff ID: ${made.login}\nPassword: ${made.pw}` : "";
@@ -64,12 +65,14 @@ export function CreateStaff({ site }: { site: string }) {
         onSubmit={e => {
           e.preventDefault();
           const snapshot = { name: name.trim(), login: login.trim().toLowerCase(), pw };
-          run(() => createStaffAccount({ name, login, password: pw }), r => {
+          if (admin && !window.confirm(`Give ${snapshot.name || "this login"} full admin access? They'll be able to change settings and fees, manage staff, delete records and close the books.`)) return;
+          run(() => createStaffAccount({ name, login, password: pw, admin }), r => {
             if (!r.ok) return;
             setMade(snapshot);
             setName("");
             setLogin("");
             setPw("");
+            setAdmin(false);
           });
         }}
       >
@@ -81,8 +84,11 @@ export function CreateStaff({ site }: { site: string }) {
             <button className="btn sm" type="button" onClick={() => setPw(makePassword())}>Make one</button>
           </span>
         </label>
+        <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 6, alignSelf: "end" }}>
+          <input type="checkbox" checked={admin} onChange={e => setAdmin(e.target.checked)} /> Full admin access
+        </label>
         <div className="field" style={{ alignSelf: "end" }}>
-          <button className="btn pri" type="submit" disabled={pending}>Create login</button>
+          <button className="btn pri" type="submit" disabled={pending}>{admin ? "Create admin login" : "Create login"}</button>
         </div>
       </form>
       <Msg r={msg} />
@@ -122,14 +128,17 @@ export function StaffMember({ s }: { s: StaffRow }) {
             {shown ? <p className="fine">New password for {s.login}: <span className="mono">{shown}</span> (only shown now)</p> : null}
             <div className="inline-form">
               {s.role === "admin" ? (
-                <ConfirmButton label="Make staff (not admin)" confirm="Tap again to confirm" onConfirm={() => run(() => setStaffRole(s.id, "staff"))} />
-              ) : s.login ? (
+                <ConfirmButton label="Make staff (no admin access)" confirm="Tap again to confirm" onConfirm={() => run(() => setStaffRole(s.id, "staff"))} />
+              ) : !s.suspended ? (
+                <ConfirmButton className="btn sm" label="Make admin (full access)" confirm="Full access to settings, staff, money. Sure?" onConfirm={() => run(() => setStaffRole(s.id, "admin"))} />
+              ) : null}
+              {s.login ? (
                 s.suspended
                   ? <button className="btn sm" type="button" disabled={pending} onClick={() => run(() => setStaffActive(s.id, true))}>Turn access back on</button>
                   : <ConfirmButton className="btn sm danger" label="Turn off access" confirm="They can’t sign in. Sure?" onConfirm={() => run(() => setStaffActive(s.id, false))} />
-              ) : (
+              ) : s.role === "staff" ? (
                 <ConfirmButton className="btn sm danger" label="Remove staff access" confirm="Back to a normal bidder?" onConfirm={() => run(() => setStaffRole(s.id, "bidder"))} />
-              )}
+              ) : null}
             </div>
             <Msg r={msg} />
           </div>
