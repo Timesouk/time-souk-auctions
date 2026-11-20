@@ -15,7 +15,7 @@ export default async function ConsignmentsPage({ searchParams }: { searchParams:
   return (
     <div className="stack" style={{ gap: 18 }}>
       <div className="adm-head">
-        <h1 className="disp">Consignments</h1>
+        <h1 className="disp">Consignment requests</h1>
         <Link className="btn sm" href={sp.all ? "/admin/consignments" : "/admin/consignments?all=1"}>{sp.all ? "Show open only" : "Show all"}</Link>
       </div>
       <p className="fine">Requests from the “Sell with us” page. Agree the estimate and reserve with the owner, then turn the request into a lot.</p>

@@ -106,13 +106,13 @@ export async function deleteSeller(id: string) {
     const { data: x, error } = await db.from("sellers").select("id, code, name, demo").eq("id", id).maybeSingle();
     if (error) return bad(error.message);
     if (!x) return bad("That seller isn't there any more.");
-    if (x.demo) return bad("This is a demo seller: remove the demo under Settings › Demo auction.");
+    if (x.demo) return bad("This is a demo seller: remove the demo under Back office settings › Demo auction.");
     const [{ data: lots }, { data: intake }, { data: direct }] = await Promise.all([
       db.from("lot_private").select("lot_id").eq("seller_id", id),
       db.from("intake_items").select("receipt_no").eq("seller_id", id),
       db.from("ledger").select("id").eq("paid_to_seller_id", id)
     ]);
-    if (lots?.length) return bad(`${x.code} has ${lots.length} lot${lots.length === 1 ? "" : "s"}. Give them another seller (Lots › Lot details) or delete them first.`);
+    if (lots?.length) return bad(`${x.code} has ${lots.length} lot${lots.length === 1 ? "" : "s"}. Give them another seller (Lots & results › Lot details) or delete them first.`);
     if (intake?.length) {
       const rs = [...new Set(intake.map(i => i.receipt_no))];
       return bad(`${x.code} has intake receipt${rs.length === 1 ? "" : "s"} ${rs.join(", ")}. If ${rs.length === 1 ? "it was" : "they were"} entered by mistake, delete ${rs.length === 1 ? "it" : "them"} first (Intake › the receipt › Delete this receipt, at the bottom), then delete the seller.`);
@@ -324,7 +324,7 @@ async function removeIntake(items: { id: string; item_id: string; receipt_no: st
       const item = items.find(i => i.id === u.intake_item_id);
       return `${item?.item_id || "a watch"} is lot ${a?.number ?? "?"}-${String(lot?.lot_number ?? "?").padStart(2, "0")}`;
     });
-    return bad(`${where.join("; ")}. Delete ${used.length === 1 ? "that lot" : "those lots"} first (Lots › Delete; a lot with a result or bids can't be deleted), then try again.`);
+    return bad(`${where.join("; ")}. Delete ${used.length === 1 ? "that lot" : "those lots"} first (Lots & results › Delete; a lot with a result or bids can't be deleted), then try again.`);
   }
   const { error: e2 } = await db.from("intake_items").delete().in("id", items.map(i => i.id));
   if (e2) return bad(e2.message);

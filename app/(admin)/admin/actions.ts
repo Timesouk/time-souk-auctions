@@ -121,7 +121,7 @@ export async function deleteAuction(id: string) {
     if (error) return bad(error.message);
     if (!a) return bad("That auction isn't there any more.");
     const n = a.number as number;
-    if (a.demo) return bad("This is the demo auction: remove it under Back office › Settings › Demo auction.");
+    if (a.demo) return bad("This is the demo auction: remove it under Back office settings › Demo auction.");
     if (a.status === "published") return bad(`Auction ${n} is on the website. Take it off the website first.`);
     if (a.status === "closed") return bad(`Auction ${n} is closed: it has run, so it stays on record.`);
     const { data: lots } = await db.from("lots").select("id, bid_count, lot_private(hammer, winner_customer_id, winner_text, intake_item_id)").eq("auction_id", id);

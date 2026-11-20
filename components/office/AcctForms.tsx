@@ -112,7 +112,7 @@ export function MoneyForm({ accounts, isAdmin }: { accounts: Opt[]; isAdmin: boo
   const desc = TABS.find(t => t[0] === tab)![2];
   return (
     <div className="stack" style={{ gap: 12 }}>
-      <div className="chips" role="tablist">
+      <div className="chips tabs">
         {tabs.map(([k, label]) => <button key={k} type="button" className="chip" aria-pressed={tab === k} onClick={() => setTab(k)}>{label}</button>)}
       </div>
       <p className="fine">{desc}</p>
@@ -153,7 +153,7 @@ export function MoneyForm({ accounts, isAdmin }: { accounts: Opt[]; isAdmin: boo
         <label className="field">{tab === "purchase" ? "Watch (brand, model, ref.)" : "Description"}<input value={memo} onChange={e => setMemo(e.target.value)} /></label>
         <label className="field">Receipt / reference<input value={ref} onChange={e => setRef(e.target.value)} /></label>
       </div>
-      {tab === "purchase" ? <p className="fine">Type the same cost on the watch&apos;s lot (Lots › Lot details › Cost) so its profit is right when it sells.</p> : null}
+      {tab === "purchase" ? <p className="fine">Type the same cost on the watch&apos;s lot (Lots & results › Lot details › Cost) so its profit is right when it sells.</p> : null}
       {tab === "expense" && from === "2010" ? <p className="fine">Not paid yet: the amount is owed to the supplier (account 2010). When you pay it, the admin records a journal entry: debit 2010, credit the bank.</p> : null}
       {tab === "expense" && from === "2500" ? <p className="fine">Paid by an owner personally: the business now owes that owner (account 2500, loans from owners).</p> : null}
       <div className="row">

@@ -120,7 +120,7 @@ export async function deleteCustomer(id: string) {
     const { error: e2 } = await db.from("customers").delete().eq("id", id);
     if (e2) return bad(e2.message);
     refresh();
-    return ok(`Buyer ${who} deleted.${c.profile_id ? " Their website account is still there (Admin › Bidders)." : ""}`);
+    return ok(`Buyer ${who} deleted.${c.profile_id ? " Their website account is still there (Website bidders)." : ""}`);
   }, true);
 }
 

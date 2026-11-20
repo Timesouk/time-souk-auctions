@@ -19,12 +19,12 @@ const LINKS: [string, string][] = [
 export function AcctNav() {
   const path = usePathname() || "";
   return (
-    <div className="chips no-print" role="navigation" aria-label="Accounting">
+    <nav className="chips tabs no-print" aria-label="Accounting">
       {LINKS.map(([href, label]) => (
-        <Link key={href} className="chip" href={href} aria-pressed={href === "/admin/office/accounting" ? path === href : path.startsWith(href)}>
+        <Link key={href} className="chip" href={href} aria-current={(href === "/admin/office/accounting" ? path === href : path.startsWith(href)) ? "page" : undefined}>
           {label}
         </Link>
       ))}
-    </div>
+    </nav>
   );
 }

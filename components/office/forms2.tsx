@@ -100,12 +100,12 @@ export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots:
           {own > 0.005 ? <p>Buyers already paid this seller <b>AED {money(own)}</b> of the ticked lots&apos; share directly: that part isn&apos;t paid again.</p> : null}
           {pool > 0.005 ? <p>From these lots&apos; auction{auctions.size === 1 ? "" : "s"}, by {date} they also hold <b>AED {money(pool)}</b> of ours (buyers paid them more than their share: our fee, delivery or other watches). It comes off below.</p>
             : pool < -0.005 ? <p>We owe this seller <b>AED {money(-pool)}</b> on top of these lots. It&apos;s added below.</p> : null}
-          <label className="row" style={{ gap: 6 }}>
+          <label className="check">
             <input type="checkbox" checked={takeOff} onChange={e => setTakeOff(e.target.checked)} />
             Take it off this payout (untick if you paid them their full share, e.g. a payment made before a buyer paid them)
           </label>
           {poolOther > 0.005 ? (
-            <label className="row" style={{ gap: 6 }}>
+            <label className="check">
               <input type="checkbox" checked={cross} disabled={!takeOff} onChange={e => setCross(e.target.checked)} />
               <span>They also hold <b>AED {money(poolOther)}</b> of ours from <b>other auctions</b>. It stays with those auctions (and comes off when you pay them); tick to take it off this payout instead.</span>
             </label>
@@ -197,7 +197,7 @@ export function AuctionPayoutForm({ sellers, accounts = [], defaultAccount = "" 
           </tbody>
         </table>
       </div>
-      <label className="row" style={{ gap: 6 }}>
+      <label className="check">
         <input type="checkbox" checked={takeOff} onChange={e => setTakeOff(e.target.checked)} />
         <span>Take off money this auction&apos;s buyers paid the sellers directly by the &ldquo;Paid on&rdquo; date (money from other auctions stays with those auctions). Untick if you paid each seller their full share.</span>
       </label>

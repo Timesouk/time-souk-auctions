@@ -160,7 +160,7 @@ export default async function OfficeSeller({ params }: { params: Promise<{ code:
         <section className="panel-card" id="fee">
           <span className="k">Fee · {feeNow.scale ? (feeNow.from === "seller scale" ? "their own scale" : "the standard scale") : feeNow.from === "seller" ? "their own %" : "the standard %"}</span>
           <p className="fine">
-            Now: {ruleText(feeNow)}. A watch with its own fee typed on it (intake or Lots › Lot details) keeps that.
+            Now: {ruleText(feeNow)}. A watch with its own fee typed on it (intake or Lots & results › Lot details) keeps that.
             {" "}Their own % or fixed fee goes under Details below; for a fee that depends on the sold price, give them their own scale here
             {feeNow.from === "scale" ? " (otherwise they follow the standard scale in Settings)" : ""}.
           </p>

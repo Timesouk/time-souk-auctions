@@ -53,8 +53,7 @@ export function AdminSignOut() {
   return (
     <button
       type="button"
-      className="linkbtn"
-      style={{ color: "var(--yellow)", textDecoration: "underline" }}
+      className="linkbtn bo-signout"
       onClick={async () => {
         await browserClient()?.auth.signOut();
         router.push("/en");

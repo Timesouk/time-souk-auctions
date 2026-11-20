@@ -59,7 +59,7 @@ export default async function IntakeReceipt({ params }: { params: Promise<{ rece
         <section className="panel-card no-print">
           <span className="k">Entered by mistake?</span>
           <p className="fine">
-            Delete the whole receipt, or remove one watch from it. A watch that&apos;s already a lot in an auction can&apos;t be removed here: delete that lot first (Lots › Delete), as long as it has no result.
+            Delete the whole receipt, or remove one watch from it. A watch that&apos;s already a lot in an auction can&apos;t be removed here: delete that lot first (Lots & results › Delete), as long as it has no result.
             Once a seller has no receipts, lots or payments left, you can delete the seller on their page. Admins only.
           </p>
           <div className="row" style={{ gap: 6 }}>

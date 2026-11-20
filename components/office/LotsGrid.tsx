@@ -47,7 +47,7 @@ function printInFrame(url: string, done: () => void) {
 }
 
 export function LotsGrid({
-  rows, cols, info, buyers, sellers, waMode, empty
+  rows, cols, info, buyers, sellers, waMode, empty, find
 }: {
   rows: GridRow[];
   cols: GridCol[];
@@ -56,12 +56,14 @@ export function LotsGrid({
   sellers?: string[];
   waMode: "app" | "web";
   empty: string;
+  /** Start with this in the Find box (from quick search). */
+  find?: string;
 }) {
   const router = useRouter();
   const [edits, setEdits] = useState<Record<string, Record<string, string>>>({});
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [filter, setFilter] = useState("");
+  const [filter, setFilter] = useState(find || "");
   const [busyRow, setBusyRow] = useState<string | null>(null);
   const table = useRef<HTMLTableElement>(null);
   const dirty = Object.keys(edits).length;

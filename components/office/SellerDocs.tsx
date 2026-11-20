@@ -312,7 +312,7 @@ export function StatementDoc({ st, s }: { st: Statement; s: OfficeSettings }) {
           <div className="doc-pay">
             <p>{sold.length} of {lots.length} sold.</p>
             {fig.unpaidHammer > 0.005 ? <p><b>AED {amt(fig.unpaidHammer)}</b> of it is on invoices the buyer hasn&apos;t paid in full yet.</p> : sold.length ? <p>Every buyer has paid.</p> : null}
-            {fig.costMissing ? <p className="fine">{fig.costMissing} sold watch{fig.costMissing === 1 ? " has" : "es have"} no cost typed (Lots › Lot details): the profit counts {fig.costMissing === 1 ? "it" : "them"} at no cost.</p> : null}
+            {fig.costMissing ? <p className="fine">{fig.costMissing} sold watch{fig.costMissing === 1 ? " has" : "es have"} no cost typed (Lots & results › Lot details): the profit counts {fig.costMissing === 1 ? "it" : "them"} at no cost.</p> : null}
           </div>
           <table className="doc-totals">
             <tbody>

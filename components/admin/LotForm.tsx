@@ -142,7 +142,7 @@ export function LotForm({ id, auctionId, auctionLabel, lotNumber, bidCount, init
         </div>
         {!p.photos.length ? (
           <div className="row" style={{ alignItems: "flex-start", gap: 14 }}>
-            <div style={{ width: 120, background: "var(--tint)", border: "2px solid var(--line)" }} dangerouslySetInnerHTML={{ __html: preview }} />
+            <div style={{ width: 120, background: "var(--tint)", border: "1px solid var(--line)", borderRadius: 8 }} dangerouslySetInnerHTML={{ __html: preview }} />
             <p className="fine" style={{ flex: 1, minWidth: 200 }}>Until photos are added, the site shows this drawing, made from the dial colour, bezel, shape and bracelet below.</p>
           </div>
         ) : null}

@@ -37,7 +37,7 @@ export default async function OfficeDispatch({ searchParams }: { searchParams: P
         </div>
       </div>
       {a.demo ? <DemoNote /> : null}
-      <p className="fine no-print">Grey rows are still waiting for payment: don&apos;t hand them over. Tick the orders the courier takes and press <b>With courier</b>; when they arrive, tick them again and press <b>Delivered</b> (or use the button on each row). Every lot on the invoice changes together; one lot on its own: <Link href={`/admin/office/lots?a=${a.number}&view=after`}>Lots › After the sale</Link>.</p>
+      <p className="fine no-print">Grey rows are still waiting for payment: don&apos;t hand them over. Tick the orders the courier takes and press <b>With courier</b>; when they arrive, tick them again and press <b>Delivered</b> (or use the button on each row). Every lot on the invoice changes together; one lot on its own: <Link href={`/admin/office/lots?a=${a.number}&view=after`}>Lots & results › After the sale</Link>.</p>
       {list.length === 0 ? (
         <p className="empty">Everything from this auction has been delivered or collected.</p>
       ) : (
