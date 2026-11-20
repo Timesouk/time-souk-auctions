@@ -79,27 +79,37 @@ export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots:
   const [ref, setRef] = useState("");
   const [account, setAccount] = useState(defaultAccount);
   const [takeOff, setTakeOff] = useState(true);
+  const [cross, setCross] = useState(false);
   const { pending, msg, run } = useAction();
   const chosen = lots.filter(l => pick.includes(l.id));
   const settles = chosen.map(l => l.settle).filter((x): x is SettleLot => !!x);
-  const cash = settleCash(settles, date, takeOff);
+  const cash = settleCash(settles, date, takeOff, cross);
   const total = Math.round(chosen.reduce((t, l) => t + (cash.get(l.id) ?? l.net), 0) * 100) / 100;
-  // what the seller holds of ours on the payout date, and their own buyers' money for the ticked lots
-  const pool = lots[0]?.settle ? poolAt(lots[0].settle.pool, date) : 0;
+  // what the seller holds of ours on the payout date: from the ticked lots' auctions (and on account), and from others
+  const auctions = new Set(settles.map(x => x.auction || ""));
+  const poolAll = lots[0]?.settle?.pool || [];
+  const pool = poolAt(poolAll, date, a => !a || auctions.has(a));
+  const poolOther = poolAt(poolAll, date, a => !!a && !auctions.has(a));
   const own = Math.round(settles.reduce((t, x) => t + (!x.ownOn || x.ownOn <= date ? x.own : 0), 0) * 100) / 100;
-  const netting = Math.abs(pool) > 0.005 || own > 0.005 || lots.some(l => (l.settle?.own || 0) > 0.005);
+  const netting = Math.abs(pool) > 0.005 || own > 0.005 || poolOther > 0.005 || lots.some(l => (l.settle?.own || 0) > 0.005);
   if (!lots.length) return <p className="fine">No sold lots waiting to be settled with this seller.</p>;
   return (
     <div className="stack" style={{ gap: 10 }}>
       {netting ? (
         <div className="alert info">
           {own > 0.005 ? <p>Buyers already paid this seller <b>AED {money(own)}</b> of the ticked lots&apos; share directly: that part isn&apos;t paid again.</p> : null}
-          {pool > 0.005 ? <p>By {date} they also hold <b>AED {money(pool)}</b> of ours (from buyers who paid them more than their share: our fee, delivery or other watches). It comes off below.</p>
-            : pool < -0.005 ? <p>We owe this seller <b>AED {money(-pool)}</b> on top of their lots (on account). It&apos;s added below.</p> : null}
+          {pool > 0.005 ? <p>From these lots&apos; auction{auctions.size === 1 ? "" : "s"}, by {date} they also hold <b>AED {money(pool)}</b> of ours (buyers paid them more than their share: our fee, delivery or other watches). It comes off below.</p>
+            : pool < -0.005 ? <p>We owe this seller <b>AED {money(-pool)}</b> on top of these lots. It&apos;s added below.</p> : null}
           <label className="row" style={{ gap: 6 }}>
             <input type="checkbox" checked={takeOff} onChange={e => setTakeOff(e.target.checked)} />
             Take it off this payout (untick if you paid them their full share, e.g. a payment made before a buyer paid them)
           </label>
+          {poolOther > 0.005 ? (
+            <label className="row" style={{ gap: 6 }}>
+              <input type="checkbox" checked={cross} disabled={!takeOff} onChange={e => setCross(e.target.checked)} />
+              <span>They also hold <b>AED {money(poolOther)}</b> of ours from <b>other auctions</b>. It stays with those auctions (and comes off when you pay them); tick to take it off this payout instead.</span>
+            </label>
+          ) : null}
         </div>
       ) : null}
       <div className="tbl-wrap">
@@ -129,7 +139,7 @@ export function PayoutForm({ lots, accounts = [], defaultAccount = "" }: { lots:
             {accounts.map(a => <option key={a.code} value={a.code}>{total < 0 ? "Received into" : "Paid from"} {a.code} · {a.name}</option>)}
           </select>
         ) : null}
-        <button type="button" className="btn pri" disabled={pending || !pick.length} onClick={() => run(() => markSellerPaid({ lotIds: pick, date, ref, account: accounts.length ? account : undefined, takeOff }))}>
+        <button type="button" className="btn pri" disabled={pending || !pick.length} onClick={() => run(() => markSellerPaid({ lotIds: pick, date, ref, account: accounts.length ? account : undefined, takeOff, cross: takeOff && cross }))}>
           {total < 0 ? `Mark ${pick.length} settled · seller paid us AED ${money(-total)}` : `Mark ${pick.length} paid · AED ${money(total)}`}
         </button>
       </div>
@@ -189,7 +199,7 @@ export function AuctionPayoutForm({ sellers, accounts = [], defaultAccount = "" 
       </div>
       <label className="row" style={{ gap: 6 }}>
         <input type="checkbox" checked={takeOff} onChange={e => setTakeOff(e.target.checked)} />
-        <span>Take off money buyers paid the sellers directly by the &ldquo;Paid on&rdquo; date. Untick if you paid each seller their full share (for example, paid before any buyer paid them).</span>
+        <span>Take off money this auction&apos;s buyers paid the sellers directly by the &ldquo;Paid on&rdquo; date (money from other auctions stays with those auctions). Untick if you paid each seller their full share.</span>
       </label>
       <div className="inline-form">
         <label className="k">Paid on</label>

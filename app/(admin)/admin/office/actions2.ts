@@ -14,6 +14,7 @@ import type { Result } from "../actions";
 import { booksClosedUpTo, closedMessage } from "@/lib/office/lock";
 import { deliveryPlan, isDeliveryStep, stepWords, stillOwes } from "@/lib/office/delivery";
 import { cleanScale, scaleProblem } from "@/lib/office/fees";
+import { crossSetoffFix } from "@/lib/office/seller-account";
 
 const ok = (message: string, id?: string): Result => ({ ok: true, message, id });
 /** A column added by 0008 missing means that update hasn't been run yet: say so plainly. */
@@ -170,7 +171,7 @@ export async function deleteSettlement(id: string) {
  * Settles sold lots with their seller. Each lot remembers the cash that moved: its net, less anything the buyer paid
  * the seller directly (which can leave the seller owing us the difference: a negative amount, money in).
  */
-export async function markSellerPaid(input: { lotIds: string[]; date: string; ref: string; account?: string; takeOff?: boolean }) {
+export async function markSellerPaid(input: { lotIds: string[]; date: string; ref: string; account?: string; takeOff?: boolean; cross?: boolean }) {
   return guard(async () => {
     if (!input.lotIds?.length) return bad("Choose the lots paid.");
     const date = ymd(input.date) || today();
@@ -180,7 +181,8 @@ export async function markSellerPaid(input: { lotIds: string[]; date: string; re
     const picked = input.lotIds.slice(0, 500).map(id => o.lotsById.get(id)).filter((l): l is LotView => !!l && l.sold && l.type === "Consignment" && !l.seller_paid_on);
     if (!picked.length) return bad("Those lots are already settled (refresh the page).");
     // only money buyers had paid the seller by the payout date comes off (and none, when staff say they paid in full)
-    const cash = settleCash(picked.map(l => l.settle).filter((x): x is NonNullable<LotView["settle"]> => !!x), date, input.takeOff !== false);
+    // other auctions' money only when staff tick it
+    const cash = settleCash(picked.map(l => l.settle).filter((x): x is NonNullable<LotView["settle"]> => !!x), date, input.takeOff !== false, !!input.cross);
     const db = adminClient();
     const base = { seller_paid_on: date, payout_ref: str(input.ref, 80), ...(input.account ? { payout_account: str(input.account, 6) } : {}), updated_at: new Date().toISOString() };
     for (const l of picked) {
@@ -237,6 +239,31 @@ export async function setInvoiceDelivery(input: { nos: string[]; step: string; d
     const skipped = step === "With courier" && pickups ? ` Pickup order${pickups === 1 ? "" : "s"} left as ${pickups === 1 ? "it was" : "they were"} (no courier).` : "";
     return ok(`${what} ${stepWords(step, pickups, invs.length - pickups)} (${lots} lot${lots === 1 ? "" : "s"}).${skipped}${warn}`);
   });
+}
+
+/**
+ * A seller's payout for one auction that took money they held from another auction's buyers, when in fact they were paid
+ * that auction in full: records the cash that really moved, and the money goes back to the auction it came from. Admins only.
+ */
+export async function restoreFromOtherAuctions(auctionId: string, sellerId: string) {
+  return guard(async () => {
+    const o = compute(await loadOfficeData());
+    const fix = crossSetoffFix(o, auctionId, sellerId);
+    if (!fix.size) return bad("Nothing here was taken from another auction (refresh the page).");
+    const lots = [...fix.keys()].map(id => o.lotsById.get(id)!);
+    const add = new Map(lots.map(l => [l.id, r2(fix.get(l.id)! - (l.payout_amount != null ? Number(l.payout_amount) : l.net))]));
+    const lock = await booksClosedUpTo();
+    if (lock && lots.some(l => String(l.seller_paid_on) <= lock)) return bad(closedMessage(lock));
+    const db = adminClient();
+    const now = new Date().toISOString();
+    for (const l of lots) {
+      const { error } = await db.from("lot_private").update({ payout_amount: fix.get(l.id)!, updated_at: now }).eq("lot_id", l.id);
+      if (error) return bad(error.message);
+    }
+    refresh();
+    const total = r2([...add.values()].reduce((t, v) => t + v, 0));
+    return ok(`Recorded as paid in full: AED ${total.toLocaleString("en-US")} more paid on lot${lots.length === 1 ? "" : "s"} ${lots.map(l => l.key).join(", ")}. That money is back with the auction it came from.`);
+  }, true);
 }
 
 /** Undo payouts marked by mistake (or marked with the wrong amount), so they can be marked again. Admins only. */

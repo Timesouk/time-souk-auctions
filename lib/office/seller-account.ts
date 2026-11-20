@@ -443,3 +443,20 @@ export function sellersInAuction(o: Office, auctionId: string): string[] {
   for (const e of o.ledger) if (e.kind === "Payment" && e.method === DIRECT && e.paid_to_seller_id && auctionOfInvoice(o, e.invoice_no)?.id === auctionId) ids.add(e.paid_to_seller_id);
   return [...ids];
 }
+
+/**
+ * When a seller's payout for one auction took money they held from another auction's buyers, but they were in fact paid
+ * that auction in full: the cash each of those lots really moved (what was recorded plus what came from elsewhere).
+ */
+export function crossSetoffFix(o: Office, auctionId: string, sellerId: string): Map<string, number> {
+  const f = auctionFigures(o, auctionId, sellerId);
+  const out = new Map<string, number>();
+  for (const x of f?.setoffsIn || []) {
+    if (!x.fromAuctionId || x.fromAuctionId === auctionId || !x.toLot) continue;
+    const lot = o.lots.find(l => l.auction_id === auctionId && l.seller_id === sellerId && l.key === x.toLot && l.seller_paid_on);
+    if (!lot) continue;
+    const cash = out.get(lot.id) ?? (lot.payout_amount != null ? Number(lot.payout_amount) : lot.net);
+    out.set(lot.id, r2(cash + x.amount));
+  }
+  return out;
+}

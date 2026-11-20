@@ -5,7 +5,8 @@ import { AuctionPicker, DemoNote, SetupNeeded } from "@/components/office/bits";
 import { AuctionPayoutForm, type AuctionPayoutSeller } from "@/components/office/forms2";
 import { ConfirmRun } from "@/components/office/ConfirmRun";
 import { amt } from "@/lib/office/engine";
-import { undoSellerPaid } from "../../actions2";
+import { restoreFromOtherAuctions, undoSellerPaid } from "../../actions2";
+import { auctionFigures } from "@/lib/office/seller-account";
 import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
 
@@ -38,7 +39,12 @@ export default async function AuctionPayouts({ searchParams }: { searchParams: P
     const ls = settledLots.filter(l => l.seller_id === x.id);
     const share = ls.reduce((t, l) => t + l.net, 0);
     const cash = ls.reduce((t, l) => t + (l.payout_amount != null ? Number(l.payout_amount) : l.net), 0);
-    return { x, ls, share: Math.round(share * 100) / 100, cash: Math.round(cash * 100) / 100, dates: [...new Set(ls.map(l => l.seller_paid_on!))].sort() };
+    // the part of these payouts taken from money the seller held from other auctions' buyers
+    const f = auctionFigures(o, a.id, x.id);
+    const fromOthers = (f?.setoffsIn || []).filter(s2 => s2.fromAuctionId && s2.fromAuctionId !== a.id);
+    const crossAmt = Math.round(fromOthers.reduce((t, s2) => t + s2.amount, 0) * 100) / 100;
+    const crossFrom = [...new Set(fromOthers.map(s2 => s2.fromLabel))].join(", ");
+    return { x, ls, share: Math.round(share * 100) / 100, cash: Math.round(cash * 100) / 100, crossAmt, crossFrom, dates: [...new Set(ls.map(l => l.seller_paid_on!))].sort() };
   });
   const staff = IS_PREVIEW ? null : await getStaff();
   const admin = IS_PREVIEW || staff?.role === "admin";
@@ -83,15 +89,30 @@ export default async function AuctionPayouts({ searchParams }: { searchParams: P
                     <td className="n">{amt(r.share)}</td>
                     <td className="n">
                       <b>{amt(r.cash)}</b>
-                      {Math.abs(r.share - r.cash) > 0.005 ? <small className="sub warn-ink">{amt(Math.abs(r.share - r.cash))} {r.cash < r.share ? "taken off for money held from buyers" : "more than their share"}</small> : null}
+                      {r.crossAmt > 0.005 ? <small className="sub warn-ink">AED {amt(r.crossAmt)} taken from money they held from {r.crossFrom}</small> : null}
+                      {r.share - r.cash - r.crossAmt > 0.005 ? <small className="sub">AED {amt(r.share - r.cash - r.crossAmt)} their buyers paid them directly</small> : null}
+                      {r.cash - r.share > 0.005 ? <small className="sub">AED {amt(r.cash - r.share)} more than their share</small> : null}
                     </td>
-                    <td>{admin ? <ConfirmRun label="Undo" ask={`Mark ${r.x.code}'s ${r.ls.length} watch${r.ls.length === 1 ? "" : "es"} in auction ${a.number} as not paid?\n\nUse this when they were marked with the wrong date or amount, then mark them again above.`} run={undoSellerPaid.bind(null, r.ls.map(l => l.id))} /> : null}</td>
+                    <td className="nowrap">
+                      {admin && r.crossAmt > 0.005 ? (
+                        <ConfirmRun
+                          label="Paid in full"
+                          className="btn sm"
+                          ask={`Did you pay ${r.x.code} the AED ${amt(r.crossAmt)} too (paid auction ${a.number} in full)?\n\nIt's recorded as paid now, and the money they hold goes back to ${r.crossFrom}, where it's owed.`}
+                          run={restoreFromOtherAuctions.bind(null, a.id, r.x.id)}
+                        />
+                      ) : null}{" "}
+                      {admin ? <ConfirmRun label="Undo" ask={`Mark ${r.x.code}'s ${r.ls.length} watch${r.ls.length === 1 ? "" : "es"} in auction ${a.number} as not paid?\n\nUse this when they were marked with the wrong date or amount, then mark them again above.`} run={undoSellerPaid.bind(null, r.ls.map(l => l.id))} /> : null}
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <p className="fine">If you paid a seller their full share but less was recorded here (money a buyer paid them later was taken off), press <b>Undo</b>, then mark them again with the date you actually paid them. Admins only.</p>
+          <p className="fine">
+            A payout that took money the seller held from <b>another</b> auction is flagged. If you actually paid them this auction in full, press <b>Paid in full</b>: the cash is corrected and that money goes back to the auction it came from.
+            Wrong date or lots? <b>Undo</b>, then mark them again. Admins only.
+          </p>
         </section>
       ) : null}
     </div>
