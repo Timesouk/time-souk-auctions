@@ -38,7 +38,7 @@ export default async function BiddersPage({ searchParams }: { searchParams: Prom
   return (
     <div className="stack" style={{ gap: 18 }}>
       <div className="adm-head">
-        <h1 className="disp">Bidders</h1>
+        <h1 className="disp">Website bidders</h1>
         <form className="inline-form" action="/admin/bidders">
           <input name="q" defaultValue={qv} placeholder="Name, email, phone, paddle or @handle" style={{ minWidth: 280 }} />
           <select name="filter" defaultValue={sp.filter || ""}>

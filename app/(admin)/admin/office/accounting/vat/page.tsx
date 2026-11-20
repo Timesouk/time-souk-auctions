@@ -27,7 +27,7 @@ export default async function VatPage({ searchParams }: { searchParams: Promise<
       </div>
       {!registered ? (
         <p className="alert info">
-          VAT is set to 0% in Back office › Settings (VAT on buyer invoices and on seller fees), so no VAT is being charged. If the business registers for VAT, set the rates there from the registration date, add the TRN, and record VAT on expenses in Money in &amp; out.
+          VAT is set to 0% in Back office settings (VAT on buyer invoices and on seller fees), so no VAT is being charged. If the business registers for VAT, set the rates there from the registration date, add the TRN, and record VAT on expenses in Money in &amp; out.
         </p>
       ) : null}
       <PeriodPicker action="/admin/office/accounting/vat" current={per.key} from={per.from} to={per.to} list={per.list} />

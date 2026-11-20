@@ -55,7 +55,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
   return (
     <div className="stack" style={{ gap: 18 }}>
       <div className="adm-head">
-        <h1 className="disp">Winners &amp; payments</h1>
+        <h1 className="disp">Website winners</h1>
         <form className="inline-form" action="/admin/payments">
           <select name="auction" defaultValue={auctionId}>
             {(auctions || []).map(a => <option key={a.id} value={a.id}>Auction Nº {pad2(a.number)} ({a.status})</option>)}

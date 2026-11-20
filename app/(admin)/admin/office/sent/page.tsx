@@ -21,7 +21,7 @@ export default async function OfficeSent({ searchParams }: { searchParams: Promi
     <div className="stack" style={{ gap: 16 }}>
       <div className="adm-head">
         <div>
-          <h1 className="disp">Sent log</h1>
+          <h1 className="disp">Messages sent</h1>
           <p className="fine">A row for every message opened in WhatsApp from here (and from the workbook, once imported).</p>
         </div>
         <form className="inline-form" action="/admin/office/sent">

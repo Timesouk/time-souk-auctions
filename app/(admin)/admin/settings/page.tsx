@@ -37,7 +37,7 @@ export default async function SettingsPage() {
   ];
   return (
     <div className="stack" style={{ gap: 22 }}>
-      <div className="adm-head"><h1 className="disp">Settings</h1></div>
+      <div className="adm-head"><h1 className="disp">Website settings</h1></div>
       <div className="cols">
         <div className="panel-card">
           <span className="k">Auction rules and contact</span>

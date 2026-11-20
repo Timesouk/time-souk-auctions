@@ -18,7 +18,7 @@ type View = keyof typeof VIEWS;
 
 const num = (n: number | null | undefined) => (n == null ? "" : String(n));
 
-export default async function OfficeLots({ searchParams }: { searchParams: Promise<{ a?: string; view?: string }> }) {
+export default async function OfficeLots({ searchParams }: { searchParams: Promise<{ a?: string; view?: string; q?: string }> }) {
   const sp = await searchParams;
   const view: View = sp.view === "after" || sp.view === "details" ? sp.view : "live";
   const o = await loadOffice().catch((e: Error) => e);
@@ -118,7 +118,7 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
     <div className="stack" style={{ gap: 16 }}>
       <div className="adm-head">
         <div>
-          <h1 className="disp">Lots · auction {a.number}</h1>
+          <h1 className="disp">Lots &amp; results · auction {a.number}</h1>
           <p className="fine">
             {dateText(a.sale_date, "EN")} · {lots.length} lots · {sold.length} sold · hammer AED {amt(sold.reduce((t, l) => t + (l.hammer || 0), 0))}
           </p>
@@ -126,13 +126,13 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
         <AuctionPicker auctions={o.data.auctions} current={a} action="/admin/office/lots" extra={view === "live" ? {} : { view }} />
       </div>
       {a.demo ? <DemoNote /> : null}
-      <div className="chips" role="tablist">
+      <nav className="chips tabs" aria-label="What to show">
         {(Object.keys(VIEWS) as View[]).map(v => (
-          <Link key={v} className="chip" href={q(v)} aria-pressed={v === view}>
+          <Link key={v} className="chip" href={q(v)} aria-current={v === view ? "page" : undefined}>
             {VIEWS[v]}
           </Link>
         ))}
-      </div>
+      </nav>
       {view === "live" ? (
         <p className="fine">
           Type the winner&apos;s Instagram handle (or buyer code) and the hammer price as each lot sells, then Save. A handle that isn&apos;t a buyer yet becomes a new buyer.
@@ -146,6 +146,7 @@ export default async function OfficeLots({ searchParams }: { searchParams: Promi
         buyers={buyers}
         sellers={o.data.sellers.filter(x => !!x.demo === !!a.demo).map(x => x.code)}
         waMode={s.wa_mode}
+        find={sp.q}
         empty="No lots in this auction yet. Add one below, add them under Auctions & lots, or ADD TO AUCTION from intake."
       />
       <AddLot auctionId={a.id} nextNo={nextNo} sellers={o.data.sellers.filter(x => !!x.demo === !!a.demo).map(x => ({ code: x.code, name: x.name }))} />

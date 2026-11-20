@@ -5,8 +5,8 @@ import "@fontsource/ibm-plex-mono/600.css";
 import "../../site.css";
 import "../../admin.css";
 import type { Metadata } from "next";
-import Link from "next/link";
-import { AdminNav } from "@/components/admin/AdminNav";
+import { Suspense } from "react";
+import { Chrome } from "@/components/admin/Chrome";
 import { AdminSignOut } from "@/components/admin/ui";
 import { StaffSignIn } from "@/components/admin/Staff";
 import { serverClient } from "@/lib/supabase/server";
@@ -14,7 +14,7 @@ import { Logo } from "@/components/Logo";
 import { getStaff } from "@/lib/staff";
 import { IS_PREVIEW } from "@/lib/env";
 
-export const metadata: Metadata = { title: "Admin · The Time Souk", robots: { index: false, follow: false } };
+export const metadata: Metadata = { title: "Back office · The Time Souk", robots: { index: false, follow: false } };
 export const dynamic = "force-dynamic";
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -27,27 +27,31 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     const { data } = sb ? await sb.auth.getUser() : { data: { user: null } };
     other = data.user?.email || null;
   }
+  const who = IS_PREVIEW ? "Preview: sample data" : staff ? `${staff.name} · ${staff.role === "admin" ? "Admin" : "Staff"}` : "";
   return (
     <html lang="en" dir="ltr">
       <body>
-        <div className="adm">
-          <div className="adm-top">
-            <div className="wrap">
-              <Link href="/admin" aria-label="Admin home"><Logo height={40} /></Link>
-              <strong className="mono" style={{ color: "var(--yellow)" }}>ADMIN</strong>
-              <span className="who">
-                {IS_PREVIEW ? "Preview mode: sample data, nothing is saved" : staff ? `${staff.name} · ${staff.role}` : "Not signed in"} · <Link href="/en">View site</Link>
-                {staff || other ? <> · <AdminSignOut /></> : null}
-              </span>
+        {allowed ? (
+          <div className="adm bo">
+            <Suspense fallback={<aside className="bo-side no-print" />}>
+              <Chrome isAdmin={IS_PREVIEW || staff?.role === "admin"} who={who} canSignOut={!!staff} />
+            </Suspense>
+            <div className="bo-main">
+              {IS_PREVIEW ? <p className="bo-sample no-print">Sample data for a preview. Nothing you type is saved.</p> : null}
+              <main className="adm-main">
+                <div className="bo-page">{children}</div>
+              </main>
             </div>
           </div>
-          {allowed ? <AdminNav isAdmin={IS_PREVIEW || staff?.role === "admin"} /> : null}
-          <main className="adm-main">
-            <div className="wrap">
-              {allowed ? children : <StaffSignIn signedInAs={other} />}
+        ) : (
+          <div className="adm bo-out">
+            <div className="bo-out-box">
+              <Logo height={52} />
+              <StaffSignIn signedInAs={other} />
+              {other ? <p className="fine">Not you? <AdminSignOut /></p> : null}
             </div>
-          </main>
-        </div>
+          </div>
+        )}
       </body>
     </html>
   );

@@ -75,7 +75,7 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
               <tr>
                 <th className="no-print"><TickAll formId="inv-delivery" /></th>
                 <th>Invoice</th><th>Buyer</th><th>Lots</th><th className="n">Total</th><th className="n">Paid</th><th className="n">Balance</th>
-                <th>Status</th><th>Due</th><th>Sent</th><th>Next step</th><th />
+                <th>Status</th><th>Due</th><th>Next step</th><th />
               </tr>
             </thead>
             <tbody>
@@ -100,9 +100,9 @@ export default async function OfficeInvoices({ searchParams }: { searchParams: P
                     <td><Pill s={i.status} />{i.deliveryStatus !== "Not sent" ? <small className="sub">{i.deliveryStatus}</small> : null}</td>
                     <td className="nowrap">
                       {i.balance > 0 && i.paysBy !== COD && i.due ? (i.hoursOverdue ? <span className="warn-ink">{i.hoursOverdue}h overdue</span> : dateText(new Date(i.due + 4 * 3600e3).toISOString().slice(0, 10), "EN")) : ""}
+                      <small className="sub">{i.sentAt ? `Sent ${dateText(new Date(Date.parse(i.sentAt) + 4 * 3600e3).toISOString().slice(0, 10), "EN").slice(4)}` : "Not sent"}</small>
                     </td>
-                    <td className="nowrap fine">{i.sentAt ? dateText(new Date(Date.parse(i.sentAt) + 4 * 3600e3).toISOString().slice(0, 10), "EN").slice(4) : "–"}</td>
-                    <td className="fine">{i.nextStep}</td>
+                    <td className="fine" style={{ minWidth: "9em" }}>{i.nextStep}</td>
                     <td className="nowrap">
                       <div className="row" style={{ gap: 4, flexWrap: "nowrap" }}>
                         <WaButton label={i.sentAt ? "Resend" : "Send"} phone={i.customer.phone} text={m.invoice} mode={s.wa_mode}

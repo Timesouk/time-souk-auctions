@@ -34,7 +34,7 @@ export function InvoiceDelivery({ inv, courier: courier0, today }: { inv: Delive
   return (
     <div className="stack" style={{ gap: 8 }}>
       <span className="k">Delivery · {inv.status}</span>
-      <p className="fine">Sets every lot on this invoice at once. One lot on its own: Lots › After the sale.</p>
+      <p className="fine">Sets every lot on this invoice at once. One lot on its own: Lots & results › After the sale.</p>
       <div className="inline-form">
         <label className="k">{inv.pickup ? "Collected on" : "Sent / delivered on"}</label>
         <input type="date" value={date} onChange={e => setDate(e.target.value)} />

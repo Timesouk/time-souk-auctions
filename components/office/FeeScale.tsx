@@ -75,7 +75,7 @@ export function FeeScaleEditor({ value, from: from0, sellerId, fallback, feeMin 
         <input inputMode="decimal" value={tryPrice} onChange={e => setTryPrice(e.target.value)} aria-label="Try a sold price" style={{ width: 110 }} />
         <span className="fine">{fee != null ? <>fee <b>AED {money(fee)}</b>, seller gets AED {money(price - fee)} (before any VAT on the fee)</> : ""}</span>
       </div>
-      <label className="row" style={{ gap: 6 }}>
+      <label className="check">
         <span className="fine">Applies to auctions on or after</span>
         <input type="date" value={from} onChange={e => setFrom(e.target.value)} aria-label="Applies from" />
         <span className="fine">{from ? "Earlier auctions keep the fee they had." : "Blank: every auction, including past ones (their fees and statements change)."}</span>

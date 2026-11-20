@@ -248,7 +248,7 @@ From the **sandbox** Partner Portal, copy the **API token** and the **notificati
 Then in the Tamara Partner Portal: **Settings → General Settings → Webhooks → Add webhooks**. URL `https://www.yourdomain.com/api/webhooks/tamara`; events **order_approved**, **order_authorised**, **order_captured**.
 
 ### 5.4 Register Ziina and Tabby webhooks
-**Redeploy**, then follow Part 7 to reach the admin and press **Register payment webhooks** (Admin → Settings). It tells you whether Ziina and Tabby accepted the address.
+**Redeploy**, then follow Part 7 to reach the admin and press **Register payment webhooks** (Website settings). It tells you whether Ziina and Tabby accepted the address.
 
 > **Note on pay-later limits.** Tabby and Tamara approve each shopper up to their own limit. For expensive watches the buyer may be offered a lower amount or declined; card and bank transfer always remain available on the payment page.
 
@@ -263,7 +263,7 @@ Then in the Tamara Partner Portal: **Settings → General Settings → Webhooks 
    ```
 3. Go to `https://www.yourdomain.com/admin`. You're in.
 
-**Adding staff:** **Admin → Staff → Create a staff login**: their name, a staff ID (e.g. `ahmed`) and a password (**Make one** creates a strong one). Send them the details shown (the password is shown only once). They sign in at `https://www.yourdomain.com/admin` with the staff ID and password; no email or phone code. Forgotten password: type a new one on the Staff page and **Save password**. Someone leaving: **Turn off access**.
+**Adding staff:** **Staff → Create a staff login**: their name, a staff ID (e.g. `ahmed`) and a password (**Make one** creates a strong one). Send them the details shown (the password is shown only once). They sign in at `https://www.yourdomain.com/admin` with the staff ID and password; no email or phone code. Forgotten password: type a new one on the Staff page and **Save password**. Someone leaving: **Turn off access**.
 
 Staff run the live console and the back office day to day: lots, bidders, invoices, payments, payouts, intake and dispatch. **Admins** can also change **Settings** and fees, manage **Staff**, change roles, delete auctions and records, import the workbook, close the books and reset auctions.
 
@@ -273,7 +273,7 @@ Staff run the live console and the back office day to day: lots, bidders, invoic
 
 ## Part 7 · Admin settings
 
-**Admin → Settings**:
+**Website settings** (in the sidebar under Setup):
 
 1. **Auction rules and contact.** Seller fee `7.5`, working days to pay `3`, weekly lot target `100`, the WhatsApp number and Instagram handle shown to bidders, contact email, and your **bank transfer details** (only shown on winners' payment pages). Save.
 2. **Default timer per lot.** Pick from the list (30 seconds to 10 minutes) or **Other length…** and type minutes and seconds (10 seconds to 60 minutes). Every auction uses it unless you set a different timer on that auction (Part 8). Save.
@@ -285,7 +285,7 @@ Staff run the live console and the back office day to day: lots, bidders, invoic
 
 ## Part 8 · Your first auction
 
-1. **Admin → Auctions → New auction.** It's filled in for the next Sunday at `20:00` (8 pm Dubai time), with pre-bids opening the Tuesday before at 12:00; change any of it, and the timer per lot (leave **Default** to use the one in Settings). It's created as a **draft** (not published anywhere).
+1. **Auctions & lots → New auction.** It's filled in for the next Sunday at `20:00` (8 pm Dubai time), with pre-bids opening the Tuesday before at 12:00; change any of it, and the timer per lot (leave **Default** to use the one in Settings). It's created as a **draft** (not published anywhere).
    - **To change the date, time or timer later** (even after publishing): open the auction; the **Date, time and timer** card is at the top. Change the auction date (any day; it warns you if it isn't a Sunday), live start, pre-bid opening or timer, then **Save changes**. The website, including the home-page countdown, updates straight away. The live console links here too (**Change date, time or timer**).
    - **Which timer a lot runs for:** the lot's own timer if you changed it in the live console, otherwise the auction's timer, otherwise the default in Settings.
 2. **Add lots.** Two ways:
@@ -293,7 +293,7 @@ Staff run the live console and the back office day to day: lots, bidders, invoic
      `Brand, Model, Ref, Year, Size mm, Case, Dial, Dial colour, Bezel, Shape, Hands, Bracelet, Box, Papers, Condition, Est low, Est high, Start bid, No reserve, Reserve, Source, Cost, Consignor, Consignor phone, Seller fee %, Photo link, Notes`.
      Fill one row per watch (Brand and Model are required). Estimates are optional: leave Est low and Est high empty and no estimate is shown. An empty Start bid means AED 0 (bidding opens at any amount). **Start every lot at AED 0** on the auction page sets all lots without bids to 0 at once. Select the rows **including the header**, copy, paste into the box, check the summary under it, then press the import button.
    - **One at a time:** **Add a lot** on the auction page.
-   - **From a consignment request:** **Admin → Consignments → Create lot** copies the seller's details into a new lot.
+   - **From a consignment request:** **Consignment requests → Create lot** copies the seller's details into a new lot.
 3. **Photos.** Open each lot and drag photos onto the drop area. The first photo is the cover; use ← → to reorder. Photos are resized automatically. Until a lot has photos, the site shows a drawing of the watch.
 4. **Reserves.** Set a reserve on every lot, or tick **No reserve**. The live console warns **NOT SET** for any lot without one. Reserves, costs and consignor details are never shown on the website.
 5. When the catalogue is ready, publish it:
@@ -312,7 +312,7 @@ Use a separate test auction, number **99**, with 3 or 4 lots. Do it with a colle
 - [ ] A new bidder registers: email code arrives, phone code arrives (SMS, then WhatsApp if enabled).
 - [ ] Pre-bid: place a normal bid and a maximum bid from the phone; a second account outbids it; the maximum bid answers automatically.
 - [ ] Change the auction's live start time and check the home-page countdown moves.
-- [ ] **Admin → Live:** put lot 1 on the block. The website shows it big within a second or two.
+- [ ] **Live console:** put lot 1 on the block. The website shows it big within a second or two.
 - [ ] Change **Timer for this lot** to 1:00 and check the website shows 1:00.
 - [ ] **Start timer.** Both screens count down together; the website timer turns red for the last 30 seconds.
 - [ ] Record an "Instagram" bid in the console (amount + `@handle`); it appears on the website.
@@ -320,11 +320,11 @@ Use a separate test auction, number **99**, with 3 or 4 lots. Do it with a colle
 - [ ] When the bid reaches the reserve, the site shows **Pure sale**.
 - [ ] At 0:00 the lot closes on its own. A bid after 0:00 is refused.
 - [ ] Nothing is sent yet. Press **Send invoice** (tap twice): the winner gets the payment link by **email and WhatsApp**.
-- [ ] On the payment page, type a delivery address, keep the country as **United Arab Emirates** and choose **Cash on delivery**: the total goes up by the cash on delivery charge (AED 10 by default, **Admin → Settings**). Change the country to Oman: **Cash on delivery** greys out.
-- [ ] Pay one test invoice each way: **Ziina** test card, **Tabby** test account, **Tamara** sandbox, and **bank transfer** (mark it paid in **Admin → Payments**). Each shows **Paid** and the buyer gets a receipt.
+- [ ] On the payment page, type a delivery address, keep the country as **United Arab Emirates** and choose **Cash on delivery**: the total goes up by the cash on delivery charge (AED 10 by default, **Website settings**). Change the country to Oman: **Cash on delivery** greys out.
+- [ ] Pay one test invoice each way: **Ziina** test card, **Tabby** test account, **Tamara** sandbox, and **bank transfer** (mark it paid in **Website winners**). Each shows **Paid** and the buyer gets a receipt.
 - [ ] **Reopen:** close a lot, reopen it, record a missed bid, **Hammer now**, then **Send invoice**: it goes to the new winner.
 - [ ] **Run it again?** Open auction 99 in **Auctions & lots**, scroll to **Reset for another rehearsal**, type `99` and press **Reset all lots**. Every lot goes back to its starting price (bids, timers and test invoices cleared). Admins only; never use it on a real auction.
-- [ ] Afterwards: **Unpublish** auction 99 so it's hidden, and **Cancel** its test invoices in **Admin → Payments** (or use the reset above).
+- [ ] Afterwards: **Unpublish** auction 99 so it's hidden, and **Cancel** its test invoices in **Website winners** (or use the reset above).
 
 ### 9.2 Go-live switches
 Change these in Vercel, then **Redeploy**:
@@ -350,11 +350,11 @@ Change these in Vercel, then **Redeploy**:
 | 3:00 | 6 h 15 min | 10:15 pm |
 
 **Morning**
-- Admin → Settings: all connections ✓.
+- Website settings: all connections ✓.
 - Check every lot has photos and a reserve (or "No reserve").
 
 **3:30 pm**
-- A staff member opens **Admin → Live** on a laptop (keep it plugged in, on reliable internet).
+- A staff member opens **Live console** on a laptop (keep it plugged in, on reliable internet).
 - A second screen shows the public **/en/live** page so you see what bidders see.
 
 **Each lot**
@@ -367,19 +367,19 @@ Change these in Vercel, then **Redeploy**:
 7. At **0:00** the lot closes. It's sudden death: a running timer can't be lengthened or shortened.
    - If an Instagram bid arrived **before 0:00** but wasn't typed in time: **Reopen lot → record the bid → Hammer now**.
    - **Restart timer** starts the lot's full timer again (use it if the Instagram timer and the site went out of step).
-8. **Nothing goes to the winner on its own.** When you're sure no bid was missed, press **Send invoice** (tap it twice). Or press **Next** and send it later: every sold lot waits in **Sold · invoice not sent yet** on the right of the console (and in **Winners & payments**), with **Send all** for the end of the sale.
+8. **Nothing goes to the winner on its own.** When you're sure no bid was missed, press **Send invoice** (tap it twice). Or press **Next** and send it later: every sold lot waits in **Sold · invoice not sent yet** on the right of the console (and in **Website winners**), with **Send all** for the end of the sale.
 9. Press **Next**.
 
 Bidders can bid **any amount** above the current bid (the quick buttons and max bids still use the usual steps). In **Record a bid** you can also type any amount above the current bid.
 
 **After the sale**
-- Send any invoices still waiting: **Live console → Sold · invoice not sent yet → Send all**, or one by one in **Winners & payments**.
-- **Instagram winners without an account:** in **Admin → Payments**, the invoice shows their `@handle`. Use **Copy pay link** to send it yourself, or once they register, enter their paddle number and press **Link & send payment link**.
+- Send any invoices still waiting: **Live console → Sold · invoice not sent yet → Send all**, or one by one in **Website winners**.
+- **Instagram winners without an account:** in **Website winners**, the invoice shows their `@handle`. Use **Copy pay link** to send it yourself, or once they register, enter their paddle number and press **Link & send payment link**.
 - The day before each invoice is due, a reminder goes out automatically (between 10 am and 8 pm Dubai time). **Resend email & WhatsApp** sends the link again at any time.
 - **Bank transfers:** when the money arrives, find the invoice → choose **Bank transfer** → **Mark paid**. The buyer gets a receipt.
 - **Cash on delivery (UAE deliveries only):** the invoice shows *Cash on delivery · collect AED …* and the delivery address, and you get an email. Deliver, collect the cash, then choose **Cash on delivery** → **Mark paid**. Cash on delivery invoices never show as overdue and get no reminder.
 - **Consignors:** each consigned lot shows the seller fee and what you owe the consignor. Press **Mark consignor paid** when you've paid them.
-- **Admin → Payments → Download CSV** gives your accountant every sale.
+- **Website winners → Download CSV** gives your accountant every sale.
 
 ---
 
@@ -393,11 +393,11 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | No email code | Check Resend → **Logs**. Check Supabase SMTP settings (Part 2.3), and that the templates contain `{{ .Token }}`. Look in spam. |
 | Email code says "invalid" | Codes expire after 10 minutes and only the newest code works. Ask for a new one. |
 | No phone code by WhatsApp | Set `TWILIO_VERIFY_CHANNELS=sms` and redeploy, then check the Verify service's WhatsApp tab has your Messaging Service. Twilio trial accounts only reach verified numbers. |
-| No WhatsApp payment link | **Admin → Payments** shows the error on the invoice. Usually a template that isn't approved yet or a wrong `HX…` SID. Press **Resend email & WhatsApp** after fixing. |
+| No WhatsApp payment link | **Website winners** shows the error on the invoice. Usually a template that isn't approved yet or a wrong `HX…` SID. Press **Resend email & WhatsApp** after fixing. |
 | Lots don't close / links not sent | Vercel → Project → **Settings → Cron Jobs** should list `/api/cron/tick` running every minute. Needs Vercel Pro and `CRON_SECRET`. |
 | A payment says "processing" for long | Open the invoice: the site re-checks with the provider when the buyer returns and on each webhook. Press **Register payment webhooks** again if needed. |
 | Website timer seems off | The site syncs to the server clock. Check the laptop running the console has internet; refresh the page. |
-| Someone can't bid | **Admin → Bidders**: check email confirmed, phone verified, terms accepted, not suspended. |
+| Someone can't bid | **Website bidders**: check email confirmed, phone verified, terms accepted, not suspended. |
 
 ---
 
@@ -406,19 +406,26 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 - **Terms and privacy.** The site includes draft Terms of Sale and a Privacy Policy in English and Arabic. Have a UAE lawyer review them, especially: no buyer's premium, the 3-working-day payment rule, what happens if a winner doesn't pay, the seller fee, and data handling (your database is hosted in Mumbai).
 - **Arabic copy.** Have a native speaker read the whole site in Arabic.
 - **Licensing.** Confirm with Dubai Economy and Tourism that your trade license covers running auctions (online and on Instagram).
-- **VAT and AML.** Ask your accountant how VAT applies to the seller fee and to own-stock sales, and your compliance adviser whether ID checks or reporting rules apply to high-value sales. **Admin → Bidders** lets you note an ID check per bidder.
+- **VAT and AML.** Ask your accountant how VAT applies to the seller fee and to own-stock sales, and your compliance adviser whether ID checks or reporting rules apply to high-value sales. **Website bidders** lets you note an ID check per bidder.
 
 ---
 
 ## Part 13 · The back office (the auction workbook, on the website)
 
-**Admin → Back office** does everything the Excel file *Time Souk Auction Manager* did, for every staff member at once, from any computer or phone. It works alongside the live console and website bidding.
+The back office (everything under `/admin`) does everything the Excel file *Time Souk Auction Manager* did, for every staff member at once, from any computer or phone. It works alongside the live console and website bidding.
+
+### 13.0 Finding your way around
+
+- **The sidebar** lists every page in the order a week runs: **Home**; **Before the sale** (Intake, Consignment requests, Auctions & lots, Run sheet); **Sale day** (Live console, Lots & results, Sold slips); **After the sale** (Invoices, Payments, Card links, Website winners, Dispatch); **Sellers** (Sellers, Pay sellers, Statements); **Buyers** (Buyers, Website bidders); **Reports** (Auction summary, Accounting, Messages sent); **Setup** (Back office settings, Website settings, Staff, Import workbook). The page you're on is yellow. On a phone, the menu button at the top left opens it.
+- **Home** shows the chosen auction stage by stage, left to right: Intake, Catalogue, Live sale, Results, Invoices, Payments, Dispatch, Pay sellers. Done stages have a tick; the next one to work on is yellow; red means something needs a look (a lot without a buyer, an overdue invoice). Click a stage to open its page. Under it: **Needs you now** for that auction, its money, and **Still open from any auction** so nothing from an earlier week is forgotten.
+- **Quick search:** press **Ctrl K** (⌘K on a Mac), or **/**, or click *Search or jump to…* at the top of the sidebar. Type a few letters of a page or a task (*pay sellers*, *print invoices*, *record payment*) and press Enter. Typing a name, handle or watch also offers **Buyers matching…** and **Lots matching…**.
+- **Choosing the auction:** pages that show one auction have an **Auction** button at the top right; click it and pick another. The choice is remembered as you move between pages.
 
 ### 13.1 Once
 
 1. Run `supabase/migrations/0006_back_office.sql`, `0007_accounting.sql`, `0008_office_extras.sql`, `0009_seller_settlements.sql`, `0010_fee_scales.sql` and `0011_several_admins.sql` (Part 1.2) if you haven't.
-2. **Back office → Settings** (admin): check the company and bank details, the co-branded name (**DXB Watch × The Time Souk**), fees, hours to pay, delivery and cash on delivery charges, the card fee, the WhatsApp language, and the text printed on documents. Have a lawyer review the intake declaration and seller declaration.
-3. **Back office → Import** (admin): save the workbook in Excel, then choose the `.xlsm` file. The page shows what's in it and what the invoices add up to per auction: compare with the Auctions sheet in Excel, then press **Import into the back office**. Auctions not yet on the website arrive as **Instagram only** (real auctions, not shown on the website). The Ziina key on the workbook's Settings sheet is never read. You can import again later with a newer copy: records are matched and updated, not doubled.
+2. **Back office settings** (admin): check the company and bank details, the co-branded name (**DXB Watch × The Time Souk**), fees, hours to pay, delivery and cash on delivery charges, the card fee, the WhatsApp language, and the text printed on documents. Have a lawyer review the intake declaration and seller declaration.
+3. **Import workbook** (admin): save the workbook in Excel, then choose the `.xlsm` file. The page shows what's in it and what the invoices add up to per auction: compare with the Auctions sheet in Excel, then press **Import into the back office**. Auctions not yet on the website arrive as **Instagram only** (real auctions, not shown on the website). The Ziina key on the workbook's Settings sheet is never read. You can import again later with a newer copy: records are matched and updated, not doubled.
 4. Card links: the back office uses the website's Ziina key (`ZIINA_API_KEY`, Part 5.1). Without it, paste links made in the Ziina app on each invoice's page.
 
 ### 13.2 Every auction
@@ -426,27 +433,27 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | When | Where | What |
 |---|---|---|
 | Seller arrives | **Intake → New intake** | Choose the seller (or add one), type the watches, save. Print the receipt for signing or **Send on WhatsApp** (the seller gets a private link to it). |
-| Building the catalogue | **Intake** | Tick watches in stock, choose the auction, **Add to auction**. Own stock: **Lots → Add a lot**. Photos and descriptions: **Auctions & lots** as before. |
+| Building the catalogue | **Intake** | Tick watches in stock, choose the auction, **Add to auction**. Own stock: **Lots & results → Add a lot**. Photos and descriptions: **Auctions & lots** as before. |
 | Before the live | **Statements**, **Run sheet** | Consignment listings for each seller; the run sheet for the presenter. |
-| During the live | **Lots → Live results** | Type the winner (@handle or buyer code) and hammer price, **Save** (Ctrl+S). A new handle becomes a new buyer. A buyer who wins a second lot gets a **tray** number automatically (the save message says which; it's in the Tray column and on the slips). **Print slip** prints the sold slip (80 mm) without leaving the page; **WhatsApp** sends the winner their price and how to pay. Lots run in the live console: **Overview → Bring in website results**. |
-| Seller fees by sold price | **Settings → Seller fee scale**, or a seller's page → **Fee** | Bands of sold price, each with a % of the price, a fixed fee, or both (e.g. up to AED 5,000: AED 300; up to 20,000: 7.5%; above: 5%). The band the price falls in sets the whole fee; the minimum fee still applies. Choose the first auction it applies to (earlier auctions keep their fee). A seller can have their own scale; a lot with its own fee keeps it. *Try a sold price* shows the fee before saving. |
+| During the live | **Lots & results → Live results** | Type the winner (@handle or buyer code) and hammer price, **Save** (Ctrl+S). A new handle becomes a new buyer. A buyer who wins a second lot gets a **tray** number automatically (the save message says which; it's in the Tray column and on the slips). **Print slip** prints the sold slip (80 mm) without leaving the page; **WhatsApp** sends the winner their price and how to pay. Lots run in the live console: **Home → Bring in website results**. |
+| Seller fees by sold price | **Back office settings → Seller fee scale**, or a seller's page → **Fee** | Bands of sold price, each with a % of the price, a fixed fee, or both (e.g. up to AED 5,000: AED 300; up to 20,000: 7.5%; above: 5%). The band the price falls in sets the whole fee; the minimum fee still applies. Choose the first auction it applies to (earlier auctions keep their fee). A seller can have their own scale; a lot with its own fee keeps it. *Try a sold price* shows the fee before saving. |
 | An intake receipt (or one watch on it) entered by mistake | **Intake →** the receipt | At the bottom, **Remove CR-…-01** for one watch or **Delete receipt CR-…** for all of it, then confirm (admin). A watch that's already a lot in an auction: delete that lot first. A seller whose only record was that receipt can then be deleted on their page. |
-| A lot added by mistake | **Lots** | **Delete** on its row, then confirm. Only lots with no result, website bids or website invoice; a watch from intake goes back in stock. |
+| A lot added by mistake | **Lots & results** | **Delete** on its row, then confirm. Only lots with no result, website bids or website invoice; a watch from intake goes back in stock. |
 | An auction made by mistake | **Auctions & lots →** the auction | **Delete this auction** (admin), then confirm. Its lots go with it, and so do unpaid or cancelled website invoices from a live-console test run; intake watches go back in stock. Refused once it has results, payments or card links on its invoices, a paid website invoice, website bids, or is on the website. |
 | After the live | **Invoices** | **Send** each invoice on WhatsApp (with a private link to the printable invoice). Overseas buyers: type the delivery fee on the invoice's page first. |
-| Print every invoice at once | **Invoices → Print all** (or **Overview → Print all invoices**) | Every invoice of the auction opens on one page, one invoice per sheet. Press **Print all**, then pick the printer, or **Save as PDF** for a single file. Pick a filter first (Unpaid, Ready to ship…) and the button prints just those. |
+| Print every invoice at once | **Invoices → Print all** (or **Home → Print all invoices**) | Every invoice of the auction opens on one page, one invoice per sheet. Press **Print all**, then pick the printer, or **Save as PDF** for a single file. Pick a filter first (Unpaid, Ready to ship…) and the button prints just those. |
 | Buyer replies LINK | the invoice's page | **Make a card link**, then **Send link on WhatsApp**. Paid links are recorded on Payments by themselves. |
 | Money arrives | the invoice's page | **Record payment** (full balance and the usual method are filled in), then **Send confirmation on WhatsApp**. Deposits: the buyer's page. |
 | Buyer paid a consignor directly | the invoice's page | **Record payment**, method **Paid to seller directly**, choose the seller who got the money: the watch's own seller, or any other consignor the buyer knows (even for our own stock). The invoice counts it as paid. That seller holds the money for us: it comes off their next payout, or, with no payout coming, they pay it back (**Sellers →** the seller → **Settle up outside a payout**). |
 | A buyer or seller added by mistake | **Buyers →** the buyer, **Sellers →** the seller | **Delete** at the bottom (admin), then confirm. Only when they have no lots, payments, intake receipts or settlements. |
 | Chasing payment | **Invoices → Unpaid** | **Remind** on each row; buyers reminded recently show the time instead. |
-| Packing and delivery | **Dispatch**, **Invoices**, or the invoice's page | Whole orders at once: tick the invoices and press **Packed**, **With courier** or **Delivered** (**Collected** for pickups); every lot on each invoice changes together. Paid orders also have a **Delivered** button on their row, and the invoice's page has a **Delivery** panel (date, courier / AWB, undo). Handing over an unpaid order asks first. One lot on its own: **Lots → After the sale**. Print the dispatch list for the courier to sign. |
-| Paying sellers | **Sellers →** the seller, or **Sellers → Pay a whole auction** | **Pay a whole auction** lists every consignor of the auction with what to pay each: untick anyone not paid yet, choose the date and the account it was paid from, **Mark … sellers paid**. Use it too for auctions whose sellers were paid before the back office (the workbook's *Seller paid on* was empty, so they still show as owed): put the date you actually paid them. Only money this auction's buyers paid a seller directly by that date comes off (money from other auctions stays with those auctions), and a seller's own share of a watch whose buyer paid them is kept for that watch; untick *Take off…* if you paid them their full share. On a seller's page, money they hold from other auctions comes off only if you tick it. A payout flagged *taken from money they held from auction …* that was in fact paid in full: **Paid in full** under *Already marked paid* (admin) corrects it. Wrong date or lots: **Undo**, then mark again. On a seller's page: tick the lots paid for by their buyers, **Mark paid**: the amount already takes off any money the seller holds for us (buyers who paid them directly, for any watch). When the seller owes us instead, it reads **Mark settled · seller paid us**: press it once they've paid. **Account statement** shows their whole account, every auction, with a running balance; **Statements** shows one auction in three parts: their watches (sold for, our fee, their share, the buyer and whether they've paid, and when their money is due); any money buyers paid them directly, with what the invoice was for and how much of it is theirs and how much is ours (our fee, delivery, other watches); and what we owe them **now** (buyers who have paid) and **once every buyer has paid**. The seller's page and the sellers list show the same two figures. Choose **TS** on Statements for our own stock: hammer, cost and profit for that auction. |
-| Returns and refunds | **Lots** (Exception: Returned by buyer / Withdrawn / Buyer defaulted), **Payments → Refunds to make** | The lot leaves the invoice; the money to give back is listed. **Refund** records it and offers the WhatsApp message. |
+| Packing and delivery | **Dispatch**, **Invoices**, or the invoice's page | Whole orders at once: tick the invoices and press **Packed**, **With courier** or **Delivered** (**Collected** for pickups); every lot on each invoice changes together. Paid orders also have a **Delivered** button on their row, and the invoice's page has a **Delivery** panel (date, courier / AWB, undo). Handing over an unpaid order asks first. One lot on its own: **Lots & results → After the sale**. Print the dispatch list for the courier to sign. |
+| Paying sellers | **Sellers →** the seller, or **Pay sellers** (also **Pay a whole auction** on Sellers) | **Pay sellers** lists every consignor of the auction with what to pay each: untick anyone not paid yet, choose the date and the account it was paid from, **Mark … sellers paid**. Use it too for auctions whose sellers were paid before the back office (the workbook's *Seller paid on* was empty, so they still show as owed): put the date you actually paid them. Only money this auction's buyers paid a seller directly by that date comes off (money from other auctions stays with those auctions), and a seller's own share of a watch whose buyer paid them is kept for that watch; untick *Take off…* if you paid them their full share. On a seller's page, money they hold from other auctions comes off only if you tick it. A payout flagged *taken from money they held from auction …* that was in fact paid in full: **Paid in full** under *Already marked paid* (admin) corrects it. Wrong date or lots: **Undo**, then mark again. On a seller's page: tick the lots paid for by their buyers, **Mark paid**: the amount already takes off any money the seller holds for us (buyers who paid them directly, for any watch). When the seller owes us instead, it reads **Mark settled · seller paid us**: press it once they've paid. **Account statement** shows their whole account, every auction, with a running balance; **Statements** shows one auction in three parts: their watches (sold for, our fee, their share, the buyer and whether they've paid, and when their money is due); any money buyers paid them directly, with what the invoice was for and how much of it is theirs and how much is ours (our fee, delivery, other watches); and what we owe them **now** (buyers who have paid) and **once every buyer has paid**. The seller's page and the sellers list show the same two figures. Choose **TS** on Statements for our own stock: hammer, cost and profit for that auction. |
+| Returns and refunds | **Lots & results** (Exception: Returned by buyer / Withdrawn / Buyer defaulted), **Payments → Refunds to make** | The lot leaves the invoice; the money to give back is listed. **Refund** records it and offers the WhatsApp message. |
 
 ### 13.3 Accounting
 
-**Back office → Accounting** keeps double-entry books. Sales, seller fees, the cost of own-stock watches sold, payments, deposits, refunds and seller payouts are booked **automatically** from the back office: nothing is typed twice. Only what the back office can't see is entered by hand, under **Money in & out**.
+**Accounting** keeps double-entry books. Sales, seller fees, the cost of own-stock watches sold, payments, deposits, refunds and seller payouts are booked **automatically** from the back office: nothing is typed twice. Only what the back office can't see is entered by hand, under **Money in & out**.
 
 **Once**
 
@@ -459,7 +466,7 @@ Bidders can bid **any amount** above the current bid (the quick buttons and max 
 | Happened | Tab | Example |
 |---|---|---|
 | A bill paid | **Expense** | Instagram ads, courier, rent, salaries. Category, amount, paid from; "5% VAT included" splits out the VAT if you're VAT-registered. |
-| A watch bought for own stock | **Stock bought** | It goes into *Watches in stock* at cost. Also type the cost on its lot (Lots › Lot details) so the profit is right when it sells. |
+| A watch bought for own stock | **Stock bought** | It goes into *Watches in stock* at cost. Also type the cost on its lot (Lots & results › Lot details) so the profit is right when it sells. |
 | Ziina, Tabby or Tamara pays out | **Transfer** | From *Ziina to receive* to the bank: amount sent, fee deducted (→ *Payment processing fees*). |
 | Cash banked, the courier hands over COD cash | **Transfer** | From *Cash on hand* / *Cash on delivery with the courier* to the bank. |
 | An owner puts money in or takes it out | **Owners' money** (admin) | Capital, drawings, loans. |
@@ -470,7 +477,7 @@ When paying a seller (**Sellers →** the seller → **Mark paid**), choose the 
 **Every month**
 
 1. **Reconcile** each bank, cash and payment-provider account: open the statement, tick each line that's on it until the *ticked balance* equals the statement's closing balance, then **Finish reconciliation**. Lines on the statement but not in the books (bank charges, payout fees) are recorded first under Money in & out.
-2. Check **Overview → Worth a look**: own-stock lots sold without a cost, overseas invoices without a delivery fee, anything in *Suspense*.
+2. Check **Accounting → Overview → Worth a look**: own-stock lots sold without a cost, overseas invoices without a delivery fee, anything in *Suspense*.
 3. Read the **Profit & loss** (month by month), **Balance sheet** and **Who owes what**.
 4. **Chart & settings → Books closed up to** (admin): set it to the month's last day. Nothing dated on or before then can change any more (payments, results, payouts, entries). Clear it to reopen.
 5. Send your accountant **Trial balance → Download the journal (CSV)**, and the **VAT** page each quarter if you're VAT-registered.
@@ -479,7 +486,7 @@ When paying a seller (**Sellers →** the seller → **Mark paid**), choose the 
 
 ### 13.4 Training staff: the demo auction
 
-**Back office → Settings → Demo auction (training)** (admin) → **Make the demo auction**. It's auction **999**: ten made-up watches, demo sellers **DEMO-C** (consignment) and **DEMO-O** (own stock) and demo buyers **D0001–D0003**. Choose auction 999 in any back office page and practise everything: results, slips, trays, invoices, WhatsApp (give a demo buyer your own number), payments, a buyer paying the seller directly, dispatch, payouts, statements, and intake for the demo sellers.
+**Back office settings → Demo auction (training)** (admin) → **Make the demo auction**. It's auction **999**: ten made-up watches, demo sellers **DEMO-C** (consignment) and **DEMO-O** (own stock) and demo buyers **D0001–D0003**. Choose auction 999 in any back office page and practise everything: results, slips, trays, invoices, WhatsApp (give a demo buyer your own number), payments, a buyer paying the seller directly, dispatch, payouts, statements, and intake for the demo sellers.
 
 - It never goes on the website and is left out of the accounts, the summary totals and the "every auction" lists.
 - It only takes demo buyers and sellers: a new handle typed as a winner becomes a demo buyer (D0004…), and real buyers can't win demo lots. Card links are switched off.
@@ -487,7 +494,7 @@ When paying a seller (**Sellers →** the seller → **Mark paid**), choose the 
 
 The back office remembers the auction you last chose, so moving between pages (or to Accounting and back) keeps it.
 
-**Summary** shows every auction side by side (sales, profit, billed, collected, outstanding, owed to sellers). **Sent log** lists every WhatsApp message opened from the back office. **Settings → WhatsApp wording** lets you change any message in English and Arabic.
+**Auction summary** shows every auction side by side (sales, profit, billed, collected, outstanding, owed to sellers). **Messages sent** lists every WhatsApp message opened from the back office. **Back office settings → WhatsApp wording** lets you change any message in English and Arabic.
 
 ---
 

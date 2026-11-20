@@ -31,11 +31,11 @@ export default async function OfficeSettingsPage({ searchParams }: { searchParam
           <p className="fine">Fill these in once. Everything printed on invoices, statements and receipts, and every WhatsApp message, comes from here.</p>
         </div>
       </div>
-      <div className="chips">
-        <a className="chip" href="/admin/office/settings" aria-pressed={tab === "settings"}>Company, bank, fees and terms</a>
-        <a className="chip" href="/admin/office/settings?tab=messages" aria-pressed={tab === "messages"}>WhatsApp wording<small>{Object.keys(data.messages).length} edited</small></a>
-        <a className="chip" href="/admin/office/settings?tab=demo" aria-pressed={tab === "demo"}>Demo auction (training){demo ? <small>auction {demo.number}</small> : null}</a>
-      </div>
+      <nav className="chips tabs" aria-label="Settings">
+        <a className="chip" href="/admin/office/settings" aria-current={tab === "settings" ? "page" : undefined}>Company, bank, fees and terms</a>
+        <a className="chip" href="/admin/office/settings?tab=messages" aria-current={tab === "messages" ? "page" : undefined}>WhatsApp wording<small>{Object.keys(data.messages).length} edited</small></a>
+        <a className="chip" href="/admin/office/settings?tab=demo" aria-current={tab === "demo" ? "page" : undefined}>Demo auction (training){demo ? <small>auction {demo.number}</small> : null}</a>
+      </nav>
       {tab === "settings" ? (
         <>
           <section className="panel-card" id="fee-scale">

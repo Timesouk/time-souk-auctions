@@ -255,7 +255,7 @@ export function LiveConsole() {
             {blockLot && blockSt ? (
               <>
                 <div className="row" style={{ alignItems: "flex-start", flexWrap: "nowrap", gap: 14 }}>
-                  <div style={{ width: 96, flex: "none", aspectRatio: "1", background: "var(--tint)", border: "2px solid var(--ink)", display: "grid", placeItems: "center", overflow: "hidden" }}>
+                  <div style={{ width: 96, flex: "none", aspectRatio: "1", background: "var(--tint)", border: "1px solid var(--line)", borderRadius: 8, display: "grid", placeItems: "center", overflow: "hidden" }}>
                     <WatchArt lot={blockLot} prefix="cs" />
                   </div>
                   <div style={{ minWidth: 0 }}>
